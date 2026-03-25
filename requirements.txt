@@ -1,1 +1,13 @@
-# Enter your required libraries here
+# === Setup ===
+# Create venv (run from project root):
+#   py -3.14 -m venv .venv
+#
+# Activate venv:
+#   Windows:  .venv\Scripts\activate
+#   Mac/Linux: source .venv/bin/activate
+#
+# Install requirements:
+#   pip install -r requirements.txt
+
+opencv-python
+numpy
