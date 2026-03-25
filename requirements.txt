@@ -11,3 +11,6 @@
 
 opencv-python
 numpy
+torch
+open_clip
+Pillow
