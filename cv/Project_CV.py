@@ -28,10 +28,10 @@ while cap.isOpened():
     edges = cv.Canny(blur, 100, 250)
 
     # Find shapes in image
-    contours, tiers = cv.findContours(edges, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    contours, tiers = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
     # Get largest contours
-    large_contours = sorted(contours, key = cv.contourArea, reverse = True)
+    large_contours = sorted(contours, key = cv.contourArea, reverse = True)[:2]
     final_contours = []
     #print(large_contours)
     # Find shapes in image
