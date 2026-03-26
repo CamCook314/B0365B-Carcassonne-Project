@@ -9,6 +9,7 @@ if not cap.isOpened():
     print("Error, camera not opened")
     exit()
 
+i = 0
 # While camera recording
 while cap.isOpened():
     # Get a frames else exits if an error occurs
@@ -33,6 +34,7 @@ while cap.isOpened():
     # Get largest contours
     large_contours = sorted(contours, key = cv.contourArea, reverse = True)[:2]
     final_contours = []
+
     #print(large_contours)
     # Find shapes in image
     for c in large_contours:
@@ -46,6 +48,11 @@ while cap.isOpened():
             ar = w / float(h)
             if ar >= 0.9 and ar <= 1.1:
                 # Aspect ratio correct - real shape
+                roi = frame[y:y+h, x:x+w]
+                # Saves region of iterest and then saves
+                # Will eventually trigger AI model instead of saving
+                cv.imwrite("img%i.jpg" %i, roi)
+                i += 1
                 final_contours.append(sides)
 
 
