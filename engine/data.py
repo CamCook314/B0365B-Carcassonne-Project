@@ -11,6 +11,10 @@ class tile:
 	# 2 = city
 	# 3 = river
 
+	# feature_continues, whether features continue from side to side
+	# 0 = no
+	# 1 = yes
+
 	# the attribute integer represents any other special
 	# characteristics. Integers are as follows:
 
@@ -18,11 +22,12 @@ class tile:
 	# 1 = shield (for city tiles)
 	# 2 = monastery (for field tiles)
 
-	def __init__(self, up, down, left, right, attribute):
+	def __init__(self, up, down, left, right, feature_continues, attribute):
         self.up = up
         self.down = down
         self.left = left
         self.right = right
+		self.feature_continues = feature_continues
         self.attribute = attribute
 
 class game:
