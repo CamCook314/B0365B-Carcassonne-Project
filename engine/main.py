@@ -1,5 +1,6 @@
 #import ....
-from data import tile, gameClass
+from data import tile, player, gameStateClass
+from tile_set import tile_set
 
 #Datatypes
 
@@ -20,25 +21,29 @@ current_turn = 1
 
 #Function that is first called upon game start
 def gameStart():
-    initialiseBoard() #sets up internal board tracking
-    checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
+    game = initialiseBoard(NUM_PLAYERS) #sets up internal board tracking
 
-    #play turns until peices run out
-    while remaining_pieces > 0:
-        playTurn(current_turn)
+    # checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
+
+    # #play turns until peices run out
+    # while game.remaining_pieces > 0:
+    #     playTurn(current_turn)
         
         
     
 
 #initialises internal board system
 def initialiseBoard():
-    global game
+    players = [player(i) for i in range(NUM_PLAYERS)]
 
-    #TODO: Initialize players
+    game = gameStateClass(players)
 
-    #TODO: Initialize starting board with river tiles
-    game = gameClass()
-    pass
+    # starting river logic maybe function
+
+    for tile, row, col in STARTING_RIVER:
+        game.place_tile(row, col, tile)
+    
+    return game
 
 
 # Given a board state, check that all connections are legal

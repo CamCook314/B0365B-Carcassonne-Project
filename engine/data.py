@@ -43,6 +43,7 @@ class player:
 		self.meeples = 7
 		self.score = 0
 
+# This was the 2d array way of doing the class
 class gameClass:
 
 	# board is a 2d array of tile objects
@@ -58,3 +59,23 @@ class gameClass:
 
     def nextPlayer:
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
+	
+# This was the mapping way of doing the class
+class gameStateClass:
+    def __init__(self, players):
+        self.board = {}
+        self.players = players
+        self.players = players
+        self.currentIndex = 0
+        self.remaining_pieces = 72
+        self.current_turn = 1
+
+	def place_tile(self, row, col, tile):
+        self.board[(row, col)] = tile
+        self.remaining_pieces -= 1
+
+	def nextPlayer(self):
+        self.currentIndex = (self.currentIndex + 1) % len(self.players)
+	
+	 def currentPlayer(self):
+        return self.players[self.currentIndex]
