@@ -1,5 +1,5 @@
 #import ....
-
+from data import tile, gameClass
 
 #Datatypes
 
@@ -32,6 +32,12 @@ def gameStart():
 
 #initialises internal board system
 def initialiseBoard():
+    global game
+
+    #TODO: Initialize players
+
+    #TODO: Initialize starting board with river tiles
+    game = gameClass()
     pass
 
 
