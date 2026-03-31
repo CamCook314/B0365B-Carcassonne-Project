@@ -2,7 +2,7 @@ import cv2 as cv
 import numpy as np
 
 # Open Camera for recording
-cap = cv.VideoCapture(0)
+cap = cv.VideoCapture(1, cv.CAP_DSHOW)
 
 # Error if no camera connected
 if not cap.isOpened():
@@ -32,7 +32,7 @@ while cap.isOpened():
     contours, tiers = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
     # Get largest contours
-    large_contours = sorted(contours, key = cv.contourArea, reverse = True)[:2]
+    large_contours = sorted(contours, key = cv.contourArea, reverse = True)
     final_contours = []
 
     #print(large_contours)
@@ -51,7 +51,7 @@ while cap.isOpened():
                 roi = frame[y:y+h, x:x+w]
                 # Saves region of iterest and then saves
                 # Will eventually trigger AI model instead of saving
-                cv.imwrite("img%i.jpg" %i, roi)
+                #cv.imwrite("img%i.jpg" %i, roi)
                 i += 1
                 final_contours.append(sides)
 
@@ -68,4 +68,5 @@ while cap.isOpened():
     # Exit if pressed - exit button
     c = cv.waitKey(10)
     if c == ord('q'):
+        cap.release()
         break
