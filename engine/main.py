@@ -49,6 +49,7 @@ def initialiseBoard(num_players):
 
     game = gameStateClass(players)
 
+    # Temp code for now
     for tile_id, row, col in STARTING_RIVER:
         game.place_tile(row, col, tile_set[tile_id])
     

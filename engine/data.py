@@ -74,6 +74,8 @@ class gameStateClass:
 		self.current_turn = 1
 
 	def place_tile(self, row, col, tile):
+		if not self.check_valid_placement(row, col, tile):
+			raise ValueError(f"Invalid tile placement at ({row}, {col})")
 		self.board[(row, col)] = tile
 		self.remaining_pieces -= 1
 
@@ -83,8 +85,32 @@ class gameStateClass:
 	def currentPlayer(self):
 		return self.players[self.currentIndex]
 	
+	def check_valid_placement(self, row, col, tile):
+		# Position must be empty
+		if (row, col) in self.board:
+			return False
+
+		# values mean pos, opposite_side, my_edge
+		neighbors = {
+			"up":    ((row - 1, col), "down",  tile.up),
+			"down":  ((row + 1, col), "up",    tile.down),
+			"left":  ((row, col - 1), "right", tile.left),
+			"right": ((row, col + 1), "left",  tile.right),
+		}
+
+		has_neighbor = False
+		for pos, opposite_side, my_edge in neighbors.values():
+			neighbor = self.board.get(pos)
+			if neighbor is not None:
+				has_neighbor = True
+				if getattr(neighbor, opposite_side) != my_edge:
+					return False
+
+		# Must be adjacent to at least one existing tile
+		if self.board and not has_neighbor:
+			return False
+
+		return True
+	
 	def __repr__(self):
-		board_str = "\n".join(
-			f"  {coords}: {tile}" for coords, tile in self.board.items()
-		)
 		return f"board={self.board}"
