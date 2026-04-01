@@ -11,6 +11,15 @@ from tile_set import tile_set
 
 NUM_PLAYERS = 3
 
+# Hard-coded river for testing
+STARTING_RIVER = [
+    ("ID0",  7, 5),
+    ("ID9",  7, 6),
+    ("ID32", 7, 7),
+    ("ID8",  8, 7),
+    ("ID1",  9, 7),
+]
+
 TOTAL_PIECES = 72
 remaining_pieces = 72
 
@@ -23,6 +32,8 @@ current_turn = 1
 def gameStart():
     game = initialiseBoard(NUM_PLAYERS) #sets up internal board tracking
 
+    print(game.board)
+
     # checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
 
     # #play turns until peices run out
@@ -33,18 +44,15 @@ def gameStart():
     
 
 #initialises internal board system
-def initialiseBoard():
-    players = [player(i) for i in range(NUM_PLAYERS)]
+def initialiseBoard(num_players):
+    players = [player(i) for i in range(num_players)]
 
     game = gameStateClass(players)
 
-    # starting river logic maybe function
-
-    for tile, row, col in STARTING_RIVER:
-        game.place_tile(row, col, tile)
+    for tile_id, row, col in STARTING_RIVER:
+        game.place_tile(row, col, tile_set[tile_id])
     
     return game
-
 
 # Given a board state, check that all connections are legal
 def checkValidBoardState(board_state):
@@ -72,3 +80,8 @@ def checkDoneStructures():
 #updates scores for every player, given player id and score add
 def updateScores():
     pass
+
+
+# Test Game
+if __name__ == "__main__":
+    gameStart()

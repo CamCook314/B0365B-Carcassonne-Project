@@ -23,12 +23,16 @@ class tile:
 	# 2 = monastery (for field tiles)
 
 	def __init__(self, up, down, left, right, feature_continues, attribute):
-        self.up = up
-        self.down = down
-        self.left = left
-        self.right = right
+		self.up = up
+		self.down = down
+		self.left = left
+		self.right = right
 		self.feature_continues = feature_continues
-        self.attribute = attribute
+		self.attribute = attribute
+
+	# For tile printing in testing
+	def __repr__(self):
+		return f"Tile(u={self.up} d={self.down} l={self.left} r={self.right})"
 
 
 class player:
@@ -50,32 +54,37 @@ class gameClass:
 	# players is a list of player objects
 	def __init__(self, players, turn):
 		self.board = [[None] * 15 for _ in range(15)]
-        self.players = players
-        self.currentIndex = 0
+		self.players = players
+		self.currentIndex = 0
 
 
-    def currentPlayer(self):
-        return self.players[self.currentIndex]
+	def currentPlayer(self):
+		return self.players[self.currentIndex]
 
-    def nextPlayer:
+	def nextPlayer(self):
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
 	
 # This was the mapping way of doing the class
 class gameStateClass:
-    def __init__(self, players):
-        self.board = {}
-        self.players = players
-        self.players = players
-        self.currentIndex = 0
-        self.remaining_pieces = 72
-        self.current_turn = 1
+	def __init__(self, players):
+		self.board = {}
+		self.players = players
+		self.currentIndex = 0
+		self.remaining_pieces = 72
+		self.current_turn = 1
 
 	def place_tile(self, row, col, tile):
-        self.board[(row, col)] = tile
-        self.remaining_pieces -= 1
+		self.board[(row, col)] = tile
+		self.remaining_pieces -= 1
 
 	def nextPlayer(self):
-        self.currentIndex = (self.currentIndex + 1) % len(self.players)
+		self.currentIndex = (self.currentIndex + 1) % len(self.players)
 	
-	 def currentPlayer(self):
-        return self.players[self.currentIndex]
+	def currentPlayer(self):
+		return self.players[self.currentIndex]
+	
+	def __repr__(self):
+		board_str = "\n".join(
+			f"  {coords}: {tile}" for coords, tile in self.board.items()
+		)
+		return f"board={self.board}"
