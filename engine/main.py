@@ -1,6 +1,7 @@
 #import ....
 from data import tile, player, gameStateClass
 from tile_set import tile_set
+from ..cv import Project_CV
 
 #Datatypes
 
@@ -30,9 +31,20 @@ current_turn = 1
 
 #Function that is first called upon game start
 def gameStart():
+    Project_CV.cv_main_loop() # Start the CV main loop
     game = initialiseBoard(NUM_PLAYERS) #sets up internal board tracking
 
     print(game.board)
+
+    if Project_CV.cv_to_engine:
+        # This is the CV communicating to the game engine
+
+        # Variables are:
+        # Project_CV.grid_coord which is a touple (x, y)
+        # Project_CV.tile_id which is a number at the moment can be changed
+
+        # At the end have
+        Project_CV.game_response = True
 
     # checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
 
