@@ -4,6 +4,9 @@ import torch.nn.functional as F
 import open_clip
 from PIL import Image
 from pathlib import Path
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 def model_setup():
     model_name = 'ViT-B-32'
@@ -42,7 +45,7 @@ def save_embeddings(embeddings):
 
 ## load embeddings
 def load_embeddings() -> dict[Path, torch.Tensor]:
-    embeddings = torch.load("embeddings.pt", weights_only=False)
+    embeddings = torch.load("cv/embeddings.pt", weights_only=False)
     return embeddings
 
 
