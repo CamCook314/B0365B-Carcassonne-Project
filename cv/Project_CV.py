@@ -302,7 +302,8 @@ def cv_main_loop():
                                 print(f"Tile placed at grid ({best_slot[0]}, {best_slot[1]}) — ready for next tile.")
 
                                 # Save best grid slot for the placed tile
-                                grid_coord = (best_slot[0], best_slot[1])
+                                # grid_coord = (best_slot[0], best_slot[1])
+                                grid_coord = (3, 3) # Test variable
                                 grid_checked = True
 
                             else:
