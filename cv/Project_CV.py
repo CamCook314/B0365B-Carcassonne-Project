@@ -348,6 +348,7 @@ def cv_main_loop():
             grid_checked = False
             tile_checked = False
             cv_to_engine = False
+            game_response = False
             print("Finished communicating")
             
 
