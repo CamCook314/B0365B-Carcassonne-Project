@@ -1,11 +1,5 @@
-#import ....
 from data import tile, player, gameStateClass
 from tile_set import tile_set
-
-#Datatypes
-
-    #Tile
-    #board_state[Tile] - something like that
 
 #im using camelCase for functions and snake_case for variables
 
@@ -20,8 +14,15 @@ STARTING_RIVER = [
     ("ID1",  9, 7),
 ]
 
-TOTAL_PIECES = 72
-remaining_pieces = 72
+#Hard coded game for testing - tiles will be played in order, mix of valid and invalid tiles
+TEST_GAME = [
+    ("ID0",  7, 5),
+    ("ID9",  7, 6),
+    ("ID32", 7, 7),
+    ]
+
+TOTAL_PIECES = 82
+remaining_pieces = 82
 
 current_turn = 1
 
@@ -34,13 +35,15 @@ def gameStart():
 
     print(game.board)
 
-    # checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
-
+    meeple = 0
+    
+    
     # #play turns until peices run out
-    # while game.remaining_pieces > 0:
-    #     playTurn(current_turn)
-        
-        
+    #while game.remaining_pieces > 0:
+    for new_tile in TEST_GAME: #Loop only for testing the TEST_GAME list
+        playTurn(game, current_turn, new_tile, meeple)
+        current_turn += 1
+    
     
 
 #initialises internal board system
@@ -49,20 +52,18 @@ def initialiseBoard(num_players):
 
     game = gameStateClass(players)
 
+    # Commented out as i think each player will take turns placing tiles, uncomment if not the case
     # Temp code for now
-    for tile_id, row, col in STARTING_RIVER:
-        game.place_tile(row, col, tile_set[tile_id])
+    #for tile_id, row, col in STARTING_RIVER:
+        #game.place_tile(row, col, tile_set[tile_id])
+    
     
     return game
 
-# Given a board state, check that all connections are legal
-def checkValidBoardState(board_state):
-    pass
-
 
 #Runs every turn
-def playTurn(current_turn):
-    checkValidBoardState() # after tile placed
+def playTurn(game, current_turn, tile, meeple):
+
     checkMeeplePlaced() # check if meeple placed on valid tile played
     checkDoneStructures() # Checks if the new tile completed a structure
     pass

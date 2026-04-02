@@ -22,6 +22,9 @@ class tile:
 	# 1 = shield (for city tiles)
 	# 2 = monastery (for field tiles)
 
+	#Meeple_attatched is set to 0 unless a meeple is detected, then 1,
+	# The next 4 are up, down, left, right for which structure it is on, when it applies
+
 	def __init__(self, up, down, left, right, feature_continues, attribute):
 		self.up = up
 		self.down = down
@@ -29,6 +32,7 @@ class tile:
 		self.right = right
 		self.feature_continues = feature_continues
 		self.attribute = attribute
+		self.meeple_attached = (0, 0, 0, 0, 0)
 
 	# For tile printing in testing
 	def __repr__(self):
@@ -85,6 +89,20 @@ class gameStateClass:
 	def currentPlayer(self):
 		return self.players[self.currentIndex]
 	
+	#Place meeple on tile and where on tile if it has multiple places
+	def place_meeple(self, tile, up, down, left, right):
+		if tile.meeple_attached[0] == 1:
+			raise ValueError("Meeple already placed on this tile")
+
+		player = self.currentPlayer()
+		if player.meeples <= 0:
+			raise ValueError("No meeples left")
+
+		tile.meeple_attached = (1, up, down, left, right)
+		player.meeples -= 1
+
+	
+	
 	def check_valid_placement(self, row, col, tile):
 		# Position must be empty
 		if (row, col) in self.board:
@@ -114,3 +132,4 @@ class gameStateClass:
 	
 	def __repr__(self):
 		return f"board={self.board}"
+
