@@ -1,7 +1,9 @@
 import cv2 as cv
 import numpy as np
-import os
-#import image_match
+import os, sys
+# Add the parent directory to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from cv import image_match
 
 # --- Communication flags ---
 tile_checked    = False  # Flag to check if the tile has been checked by AI model
@@ -50,6 +52,11 @@ def cellCoverage(blob_mask, gx, gy, origin, tile_size):
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 def cv_main_loop():
+
+    # load AI model embeddings
+    model, preprocess = image_match.model_setup()
+    embeddings = image_match.load_embeddings()
+
     cap = cv.VideoCapture(0)
     if not cap.isOpened():
         print("Error, camera not opened")
@@ -243,16 +250,11 @@ def cv_main_loop():
                         candidate_tile_center = None
                         phase                 = WAIT_PLACEMENT
                         print("Tile found using AI model to get id")
-                        # img_emb = None  this is a temp because embedding isn't working atm
-                        #img_emb = image_match.get_embeddings(path) # real get embedding line
-                        #results = []
-                        #for path, emb in embeddings.items():
-                        #    score = torch.dot(img_emb, emb).item()
-                        #    results.append((score, path))
-                        results = [27, 48, 29] # Just temp values atm
-                        tile_id = results[0]
+                        results = image_match.match_image(path, model, embeddings)
+                        temp = results[0]
+                        tile_id = temp[1]   # (Score, id) want id to be saved
                         tile_checked = True
-                        print("Tile identified — waiting for it to be placed on the board.")
+                        print("Tile identified as #d — waiting for it to be placed on the board.", tile_id)
 
                 elif candidate_tile_center is None:
                     tile_frame_count = 0  # No tile in view, reset
@@ -343,12 +345,10 @@ def cv_main_loop():
             tile_id = None
             grid_checked = False
             tile_checked = False
+            cv_to_engine = False
             
 
         cv.imshow("1: Edges (Canny)", edges)
         cv.imshow("2: Density map", density)
         cv.imshow("3: Blobs + threshold", blobs)
         cv.imshow("4: Tile outlines", result)
-
-
-cv_main_loop()
