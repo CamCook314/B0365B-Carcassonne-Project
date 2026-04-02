@@ -3,6 +3,14 @@ import numpy as np
 import os
 #import image_match
 
+# --- Communication flags ---
+tile_checked    = False  # Flag to check if the tile has been checked by AI model
+tile_id         = None   # Store the tile id number
+grid_checked    = False  # Flag to check if a tile has been placed and coords recorded
+grid_coord      = None   # Store the grid coordinates of a placed tile
+cv_to_engine    = False  # Flag to check if CV is communicating to game engine
+game_response   = False  # Flag to check if game engine has process communication
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def maskCentroid(mask):
@@ -101,15 +109,14 @@ def cv_main_loop():
     grid_calibrated = False
     placed_tiles    = set()  # (gx, gy) for every tile confirmed on the board
 
-
-    # --- Communication flags ---
-    tile_checked    = False  # Flag to check if the tile has been checked by AI model
-    tile_id         = None   # Store the tile id number
-    grid_checked    = False  # Flag to check if a tile has been placed and coords recorded
-    grid_coord      = None   # Store the grid coordinates of a placed tile
-
-    cv_to_engine    = False  # Flag to check if CV is communicating to game engine
-    game_response   = False  # Flag to check if game engine has process communication
+    # Communication Variables
+    # Making sure no local variables are created for these communication variables
+    global tile_checked
+    global tile_id
+    global grid_checked
+    global grid_coord
+    global cv_to_engine
+    global game_response
 
     print("Place the first tile then click any OpenCV window and press 'b'.")
 
@@ -237,10 +244,12 @@ def cv_main_loop():
                         phase                 = WAIT_PLACEMENT
                         print("Tile found using AI model to get id")
                         # img_emb = None  this is a temp because embedding isn't working atm
-                        # Then get probabilities
-                        # Temp at the moment because AI model is confusing, this is usually
-                        # a list of some sort
-                        results = [27, 48, 29]
+                        #img_emb = image_match.get_embeddings(path) # real get embedding line
+                        #results = []
+                        #for path, emb in embeddings.items():
+                        #    score = torch.dot(img_emb, emb).item()
+                        #    results.append((score, path))
+                        results = [27, 48, 29] # Just temp values atm
                         tile_id = results[0]
                         tile_checked = True
                         print("Tile identified — waiting for it to be placed on the board.")
