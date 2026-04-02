@@ -254,7 +254,7 @@ def cv_main_loop():
                         temp = results[0]
                         tile_id = temp[1]   # (Score, id) want id to be saved
                         tile_checked = True
-                        print("Tile identified as #d — waiting for it to be placed on the board.", tile_id)
+                        print("Tile identified — waiting for it to be placed on the board.")
 
                 elif candidate_tile_center is None:
                     tile_frame_count = 0  # No tile in view, reset

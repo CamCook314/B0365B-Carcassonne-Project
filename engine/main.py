@@ -45,6 +45,8 @@ def gameStart():
 
         # Variables are:
         # Project_CV.grid_coord which is a tuple (x, y)
+        # TESTING
+        print(Project_CV.tile_id) # Check game engine can access variables
         # Project_CV.tile_id which is a number at the moment can be changed
 
         # At the end have
