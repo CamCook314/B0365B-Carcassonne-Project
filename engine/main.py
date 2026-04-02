@@ -44,7 +44,7 @@ def gameStart():
         # This is the CV communicating to the game engine
 
         # Variables are:
-        # Project_CV.grid_coord which is a touple (x, y)
+        # Project_CV.grid_coord which is a tuple (x, y)
         # Project_CV.tile_id which is a number at the moment can be changed
 
         # At the end have
