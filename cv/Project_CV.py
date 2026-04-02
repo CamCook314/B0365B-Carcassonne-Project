@@ -351,9 +351,10 @@ def cv_main_loop():
             cv_to_engine = False
             if (game_response[1] == 0):
                 ## Invalid move
+                ## Make phase back to placement phase
                 pass
 
-            game_response[0] = False
+            game_response = (False, game_response[1])
             print("Finished communicating")
             
 
