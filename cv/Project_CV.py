@@ -4,6 +4,7 @@ import os, sys
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cv import image_match
+import time
 
 # --- Communication flags ---
 tile_checked    = False  # Flag to check if the tile has been checked by AI model
@@ -250,7 +251,7 @@ def cv_main_loop():
                         candidate_tile_center = None
                         phase                 = WAIT_PLACEMENT
                         print("Tile found using AI model to get id")
-                        results = image_match.match_image(path, model, embeddings)
+                        results = image_match.match_image(path, model, preprocess, embeddings)
                         temp = results[0]
                         tile_id = temp[1]   # (Score, id) want id to be saved
                         tile_checked = True
@@ -334,6 +335,7 @@ def cv_main_loop():
             
         # Communication section
         if grid_checked and tile_checked:
+            print("Communicating")
             # Means we have a tile id and the tile has been placed into the grid
             # send message to game engine
             cv_to_engine = True
@@ -346,9 +348,12 @@ def cv_main_loop():
             grid_checked = False
             tile_checked = False
             cv_to_engine = False
+            print("Finished communicating")
             
 
         cv.imshow("1: Edges (Canny)", edges)
         cv.imshow("2: Density map", density)
         cv.imshow("3: Blobs + threshold", blobs)
         cv.imshow("4: Tile outlines", result)
+
+        time.sleep(1)

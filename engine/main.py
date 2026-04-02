@@ -6,6 +6,8 @@ from tile_set import tile_set
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cv import Project_CV
+import threading
+import time
 
 #Datatypes
 
@@ -35,28 +37,33 @@ current_turn = 1
 
 #Function that is first called upon game start
 def gameStart():
-    Project_CV.cv_main_loop() # Start the CV main loop
+    t = threading.Thread(target=Project_CV.cv_main_loop, daemon=True)
+    t.start()
     game = initialiseBoard(NUM_PLAYERS) #sets up internal board tracking
 
     print(game.board)
-
-    if Project_CV.cv_to_engine:
-        # This is the CV communicating to the game engine
-
-        # Variables are:
-        # Project_CV.grid_coord which is a tuple (x, y)
-        # TESTING
-        print(Project_CV.tile_id) # Check game engine can access variables
-        # Project_CV.tile_id which is a number at the moment can be changed
-
-        # At the end have
-        Project_CV.game_response = True
-
     # checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
 
     # #play turns until peices run out
     # while game.remaining_pieces > 0:
     #     playTurn(current_turn)
+
+    # Test code to test threads
+    print("Starting")
+    while True:
+        if Project_CV.cv_to_engine:
+            # This is the CV communicating to the game engine
+
+            # Variables are:
+            # Project_CV.grid_coord which is a tuple (x, y)
+            # TESTING
+            print(Project_CV.tile_id) # Check game engine can access variables
+            # Project_CV.tile_id which is a number at the moment can be changed
+
+            # At the end have
+            Project_CV.game_response = True
+        
+        time.sleep(1)
         
         
     
