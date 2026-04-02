@@ -48,13 +48,13 @@ def load_embeddings() -> dict[Path, torch.Tensor]:
 
 ## score images, return list of ranked results
 # model and preprocess from model_setup()
-def match_image(path: str, model, preprocess) -> list[tuple[float, Path]]:
+def match_image(path: str, model, preprocess, embeddings) -> list[tuple[float, str]]:
     #query_emb = get_embedding("../assets/testing_photos/IMG_9122_crop_rotate.JPG")
     query_emb = get_embedding(path, model, preprocess)
     results = []
     for path, emb in embeddings.items():
         score = torch.dot(query_emb, emb).item()
-        results.append((score, path))
+        results.append((score, path.stem))
 
     results.sort(reverse=True)
     return results
