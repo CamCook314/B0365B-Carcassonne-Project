@@ -349,7 +349,11 @@ def cv_main_loop():
             grid_checked = False
             tile_checked = False
             cv_to_engine = False
-            game_response = False
+            if (game_response[1] == 0):
+                ## Invalid move
+                pass
+
+            game_response[0] = False
             print("Finished communicating")
             
 

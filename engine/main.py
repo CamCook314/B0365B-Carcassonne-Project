@@ -61,7 +61,7 @@ def gameStart():
             # Project_CV.tile_id which is a number at the moment can be changed
 
             # At the end have
-            Project_CV.game_response = True
+            Project_CV.game_response[0] = True
         
         time.sleep(1)
         
