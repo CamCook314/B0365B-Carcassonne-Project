@@ -12,7 +12,8 @@ tile_id         = None   # Store the tile id number
 grid_checked    = False  # Flag to check if a tile has been placed and coords recorded
 grid_coord      = None   # Store the grid coordinates of a placed tile
 cv_to_engine    = False  # Flag to check if CV is communicating to game engine
-game_response   = False  # Flag to check if game engine has process communication
+
+game_response   = (False, 1)  # Flag to check if game engine has process communication, 1 means valid move, 0 means invalid move check again
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -339,7 +340,7 @@ def cv_main_loop():
             # Means we have a tile id and the tile has been placed into the grid
             # send message to game engine
             cv_to_engine = True
-            while not game_response:
+            while not game_response[0]:
                 # Wait until game engine has responded
                 # Could add if statement to remove incorrect move img
                 pass
