@@ -1,7 +1,11 @@
 #import ....
+import sys
+import os
 from data import tile, player, gameStateClass
 from tile_set import tile_set
-from ..cv import Project_CV
+# Add the parent directory to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from cv import Project_CV
 
 #Datatypes
 
