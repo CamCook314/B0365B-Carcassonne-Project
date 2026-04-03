@@ -132,4 +132,35 @@ class gameStateClass:
 	
 	def __repr__(self):
 		return f"board={self.board}"
+	
+
+#Types will be road, city, monastary
+class structures:
+	def __init__(self, first_tile):
+		self.type = None
+		self.tiles_used = [first_tile]
+		self.edges = set()
+		self.players = []
+		self.completed = False
+	
+	def extend_structure(self, tile):
+		self.tiles_used.append(tile)
+		self.edges.add(tile, "up") #Example
+		pass
+
+	def add_player(self, player):
+		self.players.append(player)
+
+	def score_structure(self):
+		pass
+
+	def check_completed(self):
+		if len(self.edges) == 0:
+			return True
+		return False
+
+	def __repr__(self):
+		pass
+		
+	
 
