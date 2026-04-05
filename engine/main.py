@@ -1,5 +1,5 @@
 #import ....
-from data import tile, gameClass
+from data import tile, gameClass, player
 
 #Datatypes
 
@@ -20,7 +20,7 @@ current_turn = 1
 
 #Function that is first called upon game start
 def gameStart():
-    initialiseBoard() #sets up internal board tracking
+    initialiseBoard() #sets up internal board tracking, TODO: Add player count as argument
     checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
 
     #play turns until peices run out
@@ -31,13 +31,18 @@ def gameStart():
     
 
 #initialises internal board system
-def initialiseBoard():
+def initialiseBoard(playerCount):
     global game
 
     #TODO: Initialize players
+    playerList = []
+    for i in range(0, playerCount):
+        #create player objects and add to game.players
+        playerList.append(player(i))
+        
 
     #TODO: Initialize starting board with river tiles
-    game = gameClass()
+    game = gameClass(playerList)
     pass
 
 

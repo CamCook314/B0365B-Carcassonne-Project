@@ -23,18 +23,18 @@ class tile:
 	# 2 = monastery (for field tiles)
 
 	def __init__(self, up, down, left, right, feature_continues, attribute):
-        self.up = up
-        self.down = down
-        self.left = left
-        self.right = right
+		self.up = up
+		self.down = down
+		self.left = left
+		self.right = right
 		self.feature_continues = feature_continues
-        self.attribute = attribute
+		self.attribute = attribute
 
 
 class player:
 
 	# Constructor for each player object. colour is an integer that represents the player's colour.
-	# Integers for the colour are as follows:
+	# integers for the colour are as follows:
 	# red = 0, blue = 1, green = 2, yellow = 3, black = 4
 	# meeples is an integer that represents how many meeples the player has left to place.
 
@@ -43,18 +43,21 @@ class player:
 		self.meeples = 7
 		self.score = 0
 
+	def returnColour(self):
+		colours = ["red", "blue", "green", "yellow", "black"]
+		return colours[self.colour]
+
 class gameClass:
 
 	# board is a 2d array of tile objects
 	# players is a list of player objects
-	def __init__(self, players, turn):
+	def __init__(self, players):
 		self.board = [[None] * 15 for _ in range(15)]
-        self.players = players
-        self.currentIndex = 0
+		self.players = players
+		self.currentIndex = 0
 
+	def currentPlayer(self):
+		return self.players[self.currentIndex]
 
-    def currentPlayer(self):
-        return self.players[self.currentIndex]
-
-    def nextPlayer:
+	def nextPlayer(self):
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
