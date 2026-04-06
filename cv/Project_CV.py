@@ -65,15 +65,18 @@ def cv_main_loop():
         exit()
 
     # --- Tunable parameters ---
-    BLUR_KERNEL = 5
-    CANNY_LOW   = 10
-    CANNY_HIGH  = 40
+    BLUR_KERNEL = 11          # Larger kernel suppresses fine wood grain before edge detection
+    CANNY_LOW   = 40
+    CANNY_HIGH  = 100
 
-    DENSITY_BLUR      = 31
-    DENSITY_THRESHOLD = 20
+    DENSITY_BLUR      = 21    # Smaller blur keeps edge density concentrated around tile edges
+    DENSITY_THRESHOLD = 8     # Raised so background grain density doesn't cross the threshold
 
-    MORPH_OPEN_KERNEL  = 25   # Removes isolated noise blobs smaller than this kernel
-    MORPH_CLOSE_KERNEL = 15   # Fills gaps within blobs and smooths edges
+    MORPH_OPEN_KERNEL  = 15   # Removes isolated noise blobs smaller than this kernel
+    MORPH_CLOSE_KERNEL = 25   # Fills gaps within blobs and smooths edges
+
+    # HSV saturation thresholding — detects colourful tiles against a grey table
+    SAT_THRESHOLD = 40        # Min saturation (0–255) to count as tile; table is near 0
 
     TILE_AREA_MIN = 2000
     TILE_AREA_MAX = 100_000_000
@@ -151,7 +154,14 @@ def cv_main_loop():
         blurred = cv.GaussianBlur(grey, (BLUR_KERNEL, BLUR_KERNEL), 0)     # First blur
         edges   = cv.Canny(blurred, CANNY_LOW, CANNY_HIGH)                 # Detects edges of blur
         density = cv.GaussianBlur(edges, (DENSITY_BLUR, DENSITY_BLUR), 0)  # Calculates density for blobs
-        _, blobs = cv.threshold(density, DENSITY_THRESHOLD, 255, cv.THRESH_BINARY)  # Makes blobs
+        _, edge_blobs = cv.threshold(density, DENSITY_THRESHOLD, 255, cv.THRESH_BINARY)
+
+        # Saturation mask — colourful tile pixels stand out against the grey table
+        hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+        _, sat_blobs = cv.threshold(hsv[:, :, 1], SAT_THRESHOLD, 255, cv.THRESH_BINARY)
+
+        # Combine: a region counts if it has edges OR saturated colour
+        blobs   = cv.bitwise_or(edge_blobs, sat_blobs)
         open_k  = cv.getStructuringElement(cv.MORPH_RECT, (MORPH_OPEN_KERNEL,  MORPH_OPEN_KERNEL))
         close_k = cv.getStructuringElement(cv.MORPH_RECT, (MORPH_CLOSE_KERNEL, MORPH_CLOSE_KERNEL))
         blobs   = cv.morphologyEx(blobs, cv.MORPH_OPEN,  open_k)   # Remove noise blobs
