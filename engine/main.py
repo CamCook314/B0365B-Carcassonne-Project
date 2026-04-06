@@ -1,15 +1,5 @@
-<<<<<<< HEAD
-#import ....
-from data import tile, gameClass, player
-
-#Datatypes
-
-    #Tile
-    #board_state[Tile] - something like that
-=======
 from data import tile, player, gameStateClass
 from tile_set import tile_set
->>>>>>> 308f0c50c0bc56ce846ff4bd15b4543e0201d863
 
 #im using camelCase for functions and snake_case for variables
 
@@ -41,12 +31,9 @@ current_turn = 1
 
 #Function that is first called upon game start
 def gameStart():
-<<<<<<< HEAD
     initialiseBoard() #sets up internal board tracking, TODO: Add player count as argument
     checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
-=======
     game = initialiseBoard(NUM_PLAYERS) #sets up internal board tracking
->>>>>>> 308f0c50c0bc56ce846ff4bd15b4543e0201d863
 
     print(game.board)
 
@@ -62,26 +49,6 @@ def gameStart():
     
 
 #initialises internal board system
-<<<<<<< HEAD
-def initialiseBoard(playerCount):
-    global game
-
-    #TODO: Initialize players
-    playerList = []
-    for i in range(0, playerCount):
-        #create player objects and add to game.players
-        playerList.append(player(i))
-        
-
-    #TODO: Initialize starting board with river tiles
-    game = gameClass(playerList)
-    pass
-
-
-# Given a board state, check that all connections are legal
-def checkValidBoardState(board_state):
-    pass
-=======
 def initialiseBoard(num_players):
     players = [player(i) for i in range(num_players)]
 
@@ -94,7 +61,6 @@ def initialiseBoard(num_players):
     
     
     return game
->>>>>>> 308f0c50c0bc56ce846ff4bd15b4543e0201d863
 
 
 #Runs every turn
