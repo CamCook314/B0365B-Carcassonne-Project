@@ -32,14 +32,11 @@ class tile:
 		self.right = right
 		self.feature_continues = feature_continues
 		self.attribute = attribute
-<<<<<<< HEAD
-=======
 		self.meeple_attached = (0, 0, 0, 0, 0)
 
 	# For tile printing in testing
 	def __repr__(self):
 		return f"Tile(u={self.up} d={self.down} l={self.left} r={self.right})"
->>>>>>> 308f0c50c0bc56ce846ff4bd15b4543e0201d863
 
 
 class player:
@@ -54,14 +51,10 @@ class player:
 		self.meeples = 7
 		self.score = 0
 
-<<<<<<< HEAD
 	def returnColour(self):
 		colours = ["red", "blue", "green", "yellow", "black"]
 		return colours[self.colour]
 
-=======
-# This was the 2d array way of doing the class
->>>>>>> 308f0c50c0bc56ce846ff4bd15b4543e0201d863
 class gameClass:
 
 	# board is a 2d array of tile objects
@@ -74,10 +67,6 @@ class gameClass:
 	def currentPlayer(self):
 		return self.players[self.currentIndex]
 
-<<<<<<< HEAD
-	def nextPlayer(self):
-		self.currentIndex = (self.currentIndex + 1) % len(self.players)
-=======
 	def currentPlayer(self):
 		return self.players[self.currentIndex]
 
@@ -152,22 +141,68 @@ class gameStateClass:
 
 #Types will be road, city, monastary
 class structures:
-	def __init__(self, first_tile):
-		self.type = None
+	def __init__(self, first_tile, structure):
+		self.type = structure
 		self.tiles_used = [first_tile]
-		self.edges = set()
+		self.edges = []
 		self.players = []
 		self.completed = False
+
+		#brute force initialisation
+		if self.type == "road":
+			if first_tile.up == 1:
+				self.edges.append((first_tile, "up"))
+			if first_tile.down == 1:
+				self.edges.append((first_tile, "down"))
+			if first_tile.left == 1:
+				self.edges.append((first_tile, "left"))
+			if first_tile.right == 1:
+				self.edges.append((first_tile, "right"))
+		elif self.type == "city":
+			if first_tile.up == 2:
+				self.edges.append((first_tile, "up"))
+			if first_tile.down == 2:
+				self.edges.append((first_tile, "down"))
+			if first_tile.left == 2:
+				self.edges.append((first_tile, "left"))
+			if first_tile.right == 2:
+				self.edges.append((first_tile, "right"))
+
 	
-	def extend_structure(self, tile):
-		self.tiles_used.append(tile)
-		self.edges.add(tile, "up") #Example
+	def extend_structure(self, row, col, tile, board):
+		self.tiles_used.append(tile) # for scoring
+		
+		neighbors = {
+			"up":    ((row - 1, col), "down",  tile.up),
+			"down":  ((row + 1, col), "up",    tile.down),
+			"left":  ((row, col - 1), "right", tile.left),
+			"right": ((row, col + 1), "left",  tile.right),
+		}
+		for direction, (pos, opposite_side, my_edge) in neighbors.items():
+			neighbor = board.get(pos)
+			if (neighbor, opposite_side) in self.edges:
+					self.edges.remove((neighbor, opposite_side))
+			elif my_edge == self.type and neighbor is None:
+				self.edges.append((tile, direction))
 		pass
 
 	def add_player(self, player):
 		self.players.append(player)
 
 	def score_structure(self):
+		temp_score = 0
+		for tile in self.tiles_used:
+			if self.type == 1:
+				temp_score += 1
+				continue
+			elif self.type == 2:
+				if tile.attribute == 1:
+					temp_score += 4
+				else:
+					temp_score += 2
+
+		for player in self.players:
+			player.score += temp_score
 		pass
 
 	def check_completed(self):
@@ -180,4 +215,4 @@ class structures:
 		
 	
 
->>>>>>> 308f0c50c0bc56ce846ff4bd15b4543e0201d863
+
