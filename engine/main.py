@@ -1,5 +1,14 @@
+#import ....
+import sys
+import os
 from data import tile, player, gameStateClass
 from tile_set import tile_set
+# Add the parent directory to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from cv import Project_CV
+import threading
+import time
+import tile_bag
 
 #im using camelCase for functions and snake_case for variables
 
@@ -32,7 +41,10 @@ current_turn = 1
 #Function that is first called upon game start
 def gameStart():
     initialiseBoard() #sets up internal board tracking, TODO: Add player count as argument
-    checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
+    t = threading.Thread(target=Project_CV.cv_main_loop, daemon=True)
+    t.start()
+    tileBag = tile_bag.tile_bag()
+    #checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
     game = initialiseBoard(NUM_PLAYERS) #sets up internal board tracking
 
     print(game.board)
@@ -45,7 +57,32 @@ def gameStart():
     for new_tile in TEST_GAME: #Loop only for testing the TEST_GAME list
         playTurn(game, current_turn, new_tile, meeple)
         current_turn += 1
-    
+
+    # #play turns until peices run out
+    # while game.remaining_pieces > 0:
+    #     playTurn(current_turn)
+
+    # Test code to test threads replicated in another file so can be commented out for now
+    # so as to not break the main file testing in engine
+    """
+    print("Starting")
+    while True:
+        if Project_CV.cv_to_engine:
+            # This is the CV communicating to the game engine
+
+            # Variables are:
+            # Project_CV.grid_coord which is a tuple (x, y)
+            # TESTING
+            print(Project_CV.tile_id) # Check game engine can access variables
+            # Project_CV.tile_id which is a number at the moment can be changed
+
+            # At the end have
+            Project_CV.game_response = (True, 1) # 1 is a temp value as nothing has been implemented for it yet
+        
+        time.sleep(0.1)
+    """
+        
+        
     
 
 #initialises internal board system
