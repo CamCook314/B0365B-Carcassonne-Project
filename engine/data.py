@@ -55,28 +55,13 @@ class player:
 		colours = ["red", "blue", "green", "yellow", "black"]
 		return colours[self.colour]
 
-class gameClass:
 
-	# board is a 2d array of tile objects
-	# players is a list of player objects
-	def __init__(self, players):
-		self.board = [[None] * 15 for _ in range(15)]
-		self.players = players
-		self.currentIndex = 0
 
-	def currentPlayer(self):
-		return self.players[self.currentIndex]
-
-	def currentPlayer(self):
-		return self.players[self.currentIndex]
-
-	def nextPlayer(self):
-		self.currentIndex = (self.currentIndex + 1) % len(self.players)
-	
-# This was the mapping way of doing the class
 class gameStateClass:
 	def __init__(self, players):
-		self.board = {}
+		# board is a 2d array of tile objects
+		self.board = [[None] * 15 for _ in range(15)]
+		# players is a list of player objects
 		self.players = players
 		self.currentIndex = 0
 		self.remaining_pieces = 72
@@ -85,7 +70,7 @@ class gameStateClass:
 	def place_tile(self, row, col, tile):
 		if not self.check_valid_placement(row, col, tile):
 			raise ValueError(f"Invalid tile placement at ({row}, {col})")
-		self.board[(row, col)] = tile
+		self.board[row][col] = tile
 		self.remaining_pieces -= 1
 
 	def nextPlayer(self):
@@ -109,11 +94,15 @@ class gameStateClass:
 	
 	
 	def check_valid_placement(self, row, col, tile):
-		# Position must be empty
-		if (row, col) in self.board:
+		# Position must be within bounds
+		if row < 0 or row >= len(self.board) or col < 0 or col >= len(self.board[0]):
 			return False
 
-		# values mean pos, opposite_side, my_edge
+		# Position must be empty
+		if self.board[row][col] is not None:
+			return False
+
+		# values mean (neighbor_row, neighbor_col), opposite_side, my_edge
 		neighbors = {
 			"up":    ((row - 1, col), "down",  tile.up),
 			"down":  ((row + 1, col), "up",    tile.down),
@@ -122,15 +111,18 @@ class gameStateClass:
 		}
 
 		has_neighbor = False
-		for pos, opposite_side, my_edge in neighbors.values():
-			neighbor = self.board.get(pos)
+		for (nr, nc), opposite_side, my_edge in neighbors.values():
+			if nr < 0 or nr >= len(self.board) or nc < 0 or nc >= len(self.board[0]):
+				continue
+			neighbor = self.board[nr][nc]
 			if neighbor is not None:
 				has_neighbor = True
 				if getattr(neighbor, opposite_side) != my_edge:
 					return False
 
-		# Must be adjacent to at least one existing tile
-		if self.board and not has_neighbor:
+		# Must be adjacent to at least one existing tile (unless board is empty)
+		board_empty = all(self.board[r][c] is None for r in range(len(self.board)) for c in range(len(self.board[0])))
+		if not board_empty and not has_neighbor:
 			return False
 
 		return True
