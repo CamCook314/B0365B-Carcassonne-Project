@@ -66,12 +66,34 @@ class gameStateClass:
 		self.currentIndex = 0
 		self.remaining_pieces = 72
 		self.current_turn = 1
+		self.structures = []
 
 	def place_tile(self, row, col, tile):
 		if not self.check_valid_placement(row, col, tile):
 			raise ValueError(f"Invalid tile placement at ({row}, {col})")
 		self.board[row][col] = tile
 		self.remaining_pieces -= 1
+
+	def manage_structures(self, row, col, tile):
+		matching_structures = []
+
+		for structure in self.structures:
+			connections = structure.check_structure_compatibility(row, col, tile, self.board)
+    
+			if connections is not None:
+				matching_structures.append(structure)
+		
+		if len(matching_structures) == 0:
+			if tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1:
+				new_struct = structures(tile, row, col, 1)
+			elif tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2:
+				new_struct = structures(tile, row, col, 2)
+			elif tile.attribute == 2: #Monastary
+				new_struct = structures(tile, row, col, 3)
+		
+			self.structures.append(new_struct)
+		elif len(matching_structures) == 1:
+			matching_structures[0].extend_structure(row, col, tile, self.board)
 
 	def nextPlayer(self):
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
@@ -131,38 +153,42 @@ class gameStateClass:
 		return f"board={self.board}"
 	
 
-#Types will be road, city, monastary
+#Types will be road, city, monastary in order 1, 2, 3
+# Monastary will be check differently
 class structures:
-	def __init__(self, first_tile, structure):
+	def __init__(self, first_tile,row, col, structure):
 		self.type = structure
-		self.tiles_used = [first_tile]
+		self.tiles_used = [(first_tile, row, col)]
 		self.edges = []
 		self.players = []
 		self.completed = False
 
 		#brute force initialisation
-		if self.type == "road":
+		if self.type == 1:
 			if first_tile.up == 1:
-				self.edges.append((first_tile, "up"))
+				self.edges.append((first_tile[0], "up"))
 			if first_tile.down == 1:
-				self.edges.append((first_tile, "down"))
+				self.edges.append((first_tile[0], "down"))
 			if first_tile.left == 1:
-				self.edges.append((first_tile, "left"))
+				self.edges.append((first_tile[0], "left"))
 			if first_tile.right == 1:
-				self.edges.append((first_tile, "right"))
-		elif self.type == "city":
+				self.edges.append((first_tile[0], "right"))
+		elif self.type == 2:
 			if first_tile.up == 2:
-				self.edges.append((first_tile, "up"))
+				self.edges.append((first_tile[0], "up"))
 			if first_tile.down == 2:
-				self.edges.append((first_tile, "down"))
+				self.edges.append((first_tile[0], "down"))
 			if first_tile.left == 2:
-				self.edges.append((first_tile, "left"))
+				self.edges.append((first_tile[0], "left"))
 			if first_tile.right == 2:
-				self.edges.append((first_tile, "right"))
+				self.edges.append((first_tile[0], "right"))
 
 	
 	def extend_structure(self, row, col, tile, board):
-		self.tiles_used.append(tile) # for scoring
+		# Check monastary differently
+		if self.type == 3:
+			return
+		self.tiles_used.append((tile, row, col)) # for scoring
 		
 		neighbors = {
 			"up":    ((row - 1, col), "down",  tile.up),
@@ -170,18 +196,53 @@ class structures:
 			"left":  ((row, col - 1), "right", tile.left),
 			"right": ((row, col + 1), "left",  tile.right),
 		}
-		for direction, (pos, opposite_side, my_edge) in neighbors.items():
-			neighbor = board.get(pos)
-			if (neighbor, opposite_side) in self.edges:
-					self.edges.remove((neighbor, opposite_side))
-			elif my_edge == self.type and neighbor is None:
-				self.edges.append((tile, direction))
-		pass
+
+		for direction, ((nr, nc), opposite_side, my_edge) in neighbors.items():
+			if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]):
+				continue
+			neighbor = board[nr][nc]
+			
+			if neighbor is not None:
+				if getattr(neighbor, opposite_side) == my_edge:
+					if (neighbor, opposite_side) in self.edges:
+						self.edges.remove((neighbor, opposite_side)) #remove non open edges
+			else:
+				if my_edge == self.type:
+					self.edges.append((tile, direction)) #add open edges
 
 	def add_player(self, player):
 		self.players.append(player)
 
+	#check if new tile belongs in this structure
+	def check_structure_compatability(self, tile, row, col, board):
+		connections = []
+
+		neighbors = {
+			"up":    ((row - 1, col), "down",  tile.up),
+			"down":  ((row + 1, col), "up",    tile.down),
+			"left":  ((row, col - 1), "right", tile.left),
+			"right": ((row, col + 1), "left",  tile.right),
+		}
+
+		for (nr, nc), opposite_side, my_edge in neighbors.values():
+			if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]):
+				continue
+			neighbor = board[nr][nc]
+
+			if neighbor is None:
+				continue
+
+			if my_edge == self.type and getattr(neighbor, opposite_side) == self.type:
+				if (neighbor, opposite_side) in self.edges:
+					connections.append((neighbor, opposite_side))
+
+		return connections
+
 	def score_structure(self):
+		if self.type == 3: #Monastary scoring
+			self.players[0].score += 9
+			return
+
 		temp_score = 0
 		for tile in self.tiles_used:
 			if self.type == 1:
@@ -197,7 +258,20 @@ class structures:
 			player.score += temp_score
 		pass
 
-	def check_completed(self):
+	def check_completed(self, board):
+		if self.type == 3: # Checks all surrounding tiles for monastary
+			row = self.tiles_used[0][1]
+			col = self.tiles_used[0][2]
+			all_neighbors = [
+				(row - 1, col - 1), (row - 1, col), (row - 1, col + 1),
+				(row,   col - 1), (row,   col), (row,   col + 1),
+				(row + 1, col - 1), (row + 1, col), (row + 1, col + 1)]
+			for nr, nc in all_neighbors:
+				if board[nr][nc] is None:
+					return False
+			return True
+
+			
 		if len(self.edges) == 0:
 			return True
 		return False
@@ -206,5 +280,7 @@ class structures:
 		pass
 		
 	
+
+
 
 
