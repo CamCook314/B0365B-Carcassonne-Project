@@ -51,7 +51,7 @@ class player:
 		self.meeples = 7
 		self.score = 0
 
-	def returnColour(self):
+	def return_colour(self):
 		colours = ["red", "blue", "green", "yellow", "black"]
 		return colours[self.colour]
 
@@ -59,55 +59,107 @@ class player:
 
 class gameStateClass:
 	def __init__(self, players):
-		# board is a 2d array of tile objects
+		# board is a 2d array of tile
 		self.board = [[None] * 15 for _ in range(15)]
+		# offsets to convert logical coordinates to array indexes
+		self.row_offset = 0
+		self.col_offset = 0
 		# players is a list of player objects
 		self.players = players
 		self.currentIndex = 0
 		self.remaining_pieces = 72
 		self.current_turn = 1
 
-	def place_tile(self, row, col, tile):
-		if not self.check_valid_placement(row, col, tile):
-			raise ValueError(f"Invalid tile placement at ({row}, {col})")
-		self.board[row][col] = tile
+	# converts x,y logical coordinates to array indexes using offsets.
+	# x increases going right, y increases going up (standard math axes).
+	# internally the 2d array has rows increasing downward, so y is negated.
+	# when the board expands upward or leftward to support negative coordinates,
+	# rows/cols are prepended and the offsets increase.
+	
+	# for example, if a tile is placed at x=-1 and the board expands left by 10,
+	# col_offset becomes 10, so x=-1 maps to array_col = -1 + 10 = 9.
+	# this way the game logic can use any coordinate (including negatives)
+	# while the underlying array always uses positive indexes.
+	def to_array_index(self, x, y):
+		array_row = -y + self.row_offset
+		array_col = x + self.col_offset
+		return array_row, array_col
+
+	# expands the board when a tile placement would fall outside the current
+  	# array bounds. works on array indexes after converting from x,y coordinates.
+	def expand_board(self, x, y):
+		array_row, array_col = self.to_array_index(x, y)
+		rows = len(self.board)
+		cols = len(self.board[0])
+
+		# expand upward
+		if array_row < 0:
+			new_rows = [([None] * cols) for _ in range(10)]
+			self.board = new_rows + self.board
+			self.row_offset += 10
+
+		# expand downward
+		if array_row >= rows:
+			new_rows = [([None] * cols) for _ in range(10)]
+			self.board = self.board + new_rows
+
+		# expand left
+		if array_col < 0:
+			for r in self.board:
+				r[:0] = [None] * 10
+			self.col_offset += 10
+
+		# expand right
+		if array_col >= cols:
+			for r in self.board:
+				r.extend([None] * 10)
+
+	# x = column (increase goes right), y = row (increase goes up)
+	def place_tile(self, x, y, tile):
+		self.expand_board(x, y)
+		if not self.check_valid_placement(x, y, tile):
+			raise ValueError(f"Invalid tile placement at ({x}, {y})")
+		array_row, array_col = self.to_array_index(x, y)
+		self.board[array_row][array_col] = tile
 		self.remaining_pieces -= 1
 
-	def nextPlayer(self):
+	def next_player(self):
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
-	
-	def currentPlayer(self):
+
+	def current_player(self):
 		return self.players[self.currentIndex]
-	
+
 	#Place meeple on tile and where on tile if it has multiple places
 	def place_meeple(self, tile, up, down, left, right):
 		if tile.meeple_attached[0] == 1:
 			raise ValueError("Meeple already placed on this tile")
 
-		player = self.currentPlayer()
+		player = self.current_player()
 		if player.meeples <= 0:
 			raise ValueError("No meeples left")
 
 		tile.meeple_attached = (1, up, down, left, right)
 		player.meeples -= 1
 
-	
-	
-	def check_valid_placement(self, row, col, tile):
+
+
+	def check_valid_placement(self, x, y, tile):
+		array_row, array_col = self.to_array_index(x, y)
+
 		# Position must be within bounds
-		if row < 0 or row >= len(self.board) or col < 0 or col >= len(self.board[0]):
+		if array_row < 0 or array_row >= len(self.board) or array_col < 0 or array_col >= len(self.board[0]):
 			return False
 
 		# Position must be empty
-		if self.board[row][col] is not None:
+		if self.board[array_row][array_col] is not None:
 			return False
 
 		# values mean (neighbor_row, neighbor_col), opposite_side, my_edge
 		neighbors = {
-			"up":    ((row - 1, col), "down",  tile.up),
-			"down":  ((row + 1, col), "up",    tile.down),
-			"left":  ((row, col - 1), "right", tile.left),
-			"right": ((row, col + 1), "left",  tile.right),
+			"up":    ((array_row - 1, array_col), "down",  tile.up),
+			"down":  ((array_row + 1, array_col), "up",    tile.down),
+			"left":  ((array_row, array_col - 1), "right", tile.left),
+			"right": ((array_row, array_col + 1), "left",  tile.right),
 		}
 
 		has_neighbor = False
@@ -126,7 +178,18 @@ class gameStateClass:
 			return False
 
 		return True
-	
+
+	# returns a dictionary of placed tiles as (x, y) graphical coordinates
+	def get_board_xy(self):
+		board_xy = {}
+		for array_row in range(len(self.board)):
+			for array_col in range(len(self.board[array_row])):
+				if self.board[array_row][array_col] is not None:
+					x = array_col - self.col_offset
+					y = -(array_row - self.row_offset)
+					board_xy[(x, y)] = self.board[array_row][array_col]
+		return board_xy
+
 	def __repr__(self):
 		return f"board={self.board}"
 	

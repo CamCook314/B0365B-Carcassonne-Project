@@ -6,7 +6,10 @@ from tile_set import tile_set
 from flask import Flask, jsonify, request
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from cv import Project_CV
+try:
+    from cv import Project_CV
+except ImportError:
+    Project_CV = None
 import threading
 import time
 import tile_bag
@@ -26,11 +29,8 @@ def get_gamestate():
         return jsonify({"error": "Game not started"}), 503
 
     board_serialised = {}
-    for row in range(len(game_state.board)):
-        for col in range(len(game_state.board[row])):
-            t = game_state.board[row][col]
-            if t is not None:
-                board_serialised[f"{row},{col}"] = {
+    for (x, y), t in game_state.get_board_xy().items():
+        board_serialised[f"{x},{y}"] = {
                     "up": t.up,
                     "down": t.down,
                     "left": t.left,
@@ -43,7 +43,7 @@ def get_gamestate():
     players_serialised = []
     for p in game_state.players:
         players_serialised.append({
-            "colour": p.returnColour(),
+            "colour": p.return_colour(),
             "meeples": p.meeples,
             "score": p.score,
         })
@@ -79,18 +79,18 @@ def start_game():
 
 
     # TESTING: Place river tiles on the board at start
-    for tile_id, row, col in STARTING_RIVER:
+    for tile_id, x, y in STARTING_RIVER:
         try:
-            game_state.place_tile(row, col, tile_set[tile_id])
+            game_state.place_tile(x, y, tile_set[tile_id])
         except ValueError:
-            print(f"Skipping invalid river tile {tile_id} at ({row}, {col})")
+            print(f"Skipping invalid river tile {tile_id} at ({x}, {y})")
 
     # TESTING: Place test tiles on the board at start
-    for tile_id, row, col in TEST_GAME:
+    for tile_id, x, y in TEST_GAME:
         try:
-            game_state.place_tile(row, col, tile_set[tile_id])
+            game_state.place_tile(x, y, tile_set[tile_id])
         except ValueError:
-            print(f"Skipping invalid test tile {tile_id} at ({row}, {col})")
+            print(f"Skipping invalid test tile {tile_id} at ({x}, {y})")
 
     return jsonify({"message": f"Game started with {num_players} players"}), 201
 
@@ -100,21 +100,21 @@ def start_api():
 
 NUM_PLAYERS = 3
 
-# Hard-coded river for testing
+# Hard-coded river for testing (x, y) where x increases right, y increases up
 STARTING_RIVER = [
-    ("ID0",  7, 5),
-    ("ID9",  7, 6),
-    ("ID32", 7, 7),
-    ("ID8",  8, 7),
-    ("ID1",  9, 7),
+    ("ID0",  0, 0),
+    ("ID9",  1, 0),
+    ("ID32", 2, 0),
+    ("ID8",  2, -1),
+    ("ID1",  2, -2),
 ]
 
 #Hard coded game for testing - tiles will be played in order, mix of valid and invalid tiles
 TEST_GAME = [
-    ("ID0",  7, 5),
-    ("ID9",  7, 6),
-    ("ID32", 7, 7),
-    ("ID122",  10, 7), #valid tile
+    ("ID0",  0, 0),    # invalid - already placed by river
+    ("ID9",  1, 0),    # invalid - already placed by river
+    ("ID32", 2, 0),    # invalid - already placed by river
+    ("ID122",  2, -3), #valid tile
     ]
 
 TOTAL_PIECES = 82
@@ -202,26 +202,31 @@ def initialiseBoard(num_players):
     game = gameStateClass(players)
 
     # Temp code for testing river
-    for tile_id, row, col in STARTING_RIVER:
-        game.place_tile(row, col, tile_set[tile_id])
+    for tile_id, x, y in STARTING_RIVER:
+        game.place_tile(x, y, tile_set[tile_id])
     
     
     return game
 
 
-def getValidPlacements(game, tile_obj):
+def get_valid_placements(game, tile_obj):
     valid = []
-    for r in range(len(game.board)):
-        for c in range(len(game.board[r])):
-            if game.check_valid_placement(r, c, tile_obj):
-                valid.append((r, c))
-    return valid
+    for (x, y), t in game.get_board_xy().items():
+        # check all 4 neighbors of each placed tile
+        neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+        for neighbor_x, neighbor_y in neighbors:
+            if game.check_valid_placement(neighbor_x, neighbor_y, tile_obj):
+                valid.append((neighbor_x, neighbor_y))
+    # also check (0,0) if board is empty
+    if not game.get_board_xy() and game.check_valid_placement(0, 0, tile_obj):
+        valid.append((0, 0))
+    return list(set(valid))
 
 
 #Runs every turn
 def playTurn(game, tileBag):
-    current = game.currentPlayer()
-    print(f"\n Turn {game.current_turn}, {current.returnColour()}'s turn")
+    current = game.current_player()
+    print(f"\n Turn {game.current_turn}, {current.return_colour()}'s turn")
     print(f"Meeples: {current.meeples}, Score: {current.score}, Pieces left: {game.remaining_pieces}")
 
     # Getting Tile from Player, might turn into fetch request to project CV?
@@ -246,49 +251,48 @@ def playTurn(game, tileBag):
 
 
     # Valid placements
-    valid = getValidPlacements(game, tile_obj)
+    valid = get_valid_placements(game, tile_obj)
     if not valid:
         print(f"No valid placements for {tile_input}, skipping turn")
         tileBag.remove_tile(tile_input)
-        game.nextPlayer()
+        game.next_player()
         game.current_turn += 1
         return
-    
-    print(f"Valid placements for {tile_input}")
-    for i, (r, c) in enumerate(valid):
-        print(f"row = {r}, col = {c}")
 
-    
-    # collect row and col from user
+    print(f"Valid placements for {tile_input}")
+    for i, (x, y) in enumerate(valid):
+        print(f"x = {x}, y = {y}")
+
+
+    # collect x and y from user
     while True:
         try:
-            r, c = map(int, input("Enter row,col: ").split(","))
-            if (r, c) not in valid:
+            x, y = map(int, input("Enter x,y: ").split(","))
+            if (x, y) not in valid:
                 print("Not valid, try again.")
                 continue
-            row, col = r, c
             break
         except:
             print("Invalid, try again.")
 
 
     # placing tile
-    game.place_tile(row, col, tile_obj)
+    game.place_tile(x, y, tile_obj)
     tileBag.remove_tile(tile_input)
-    print(f"Placed {tile_input} at ({row}, {col})")
+    print(f"Placed {tile_input} at ({x}, {y})")
 
-    checkMeeplePlaced(game, current, tile_obj, row, col)
+    checkMeeplePlaced(game, current, tile_obj, x, y)
     checkDoneStructures(game)
 
     # Advanced to next turn
-    game.nextPlayer()
+    game.next_player()
     game.current_turn += 1
     printBoard(game)
 
 
 
 #Check if a meeple was placed on new tile, if it is right colour and whether its on a road or city for double tiles
-def checkMeeplePlaced(game, current, tile_obj, row, col) :
+def checkMeeplePlaced(game, current, tile_obj, x, y) :
     pass
 
 #scans board state and checks and scores all completed structures not scored previously
