@@ -78,7 +78,7 @@ class gameStateClass:
 		matching_structures = []
 
 		for structure in self.structures:
-			connections = structure.check_structure_compatibility(row, col, tile, self.board)
+			connections = structure.check_structure_compatability(row, col, tile, self.board)
     
 			if connections is not None:
 				matching_structures.append(structure)
@@ -166,22 +166,22 @@ class structures:
 		#brute force initialisation
 		if self.type == 1:
 			if first_tile.up == 1:
-				self.edges.append((first_tile[0], "up"))
+				self.edges.append((first_tile, "up"))
 			if first_tile.down == 1:
-				self.edges.append((first_tile[0], "down"))
+				self.edges.append((first_tile, "down"))
 			if first_tile.left == 1:
-				self.edges.append((first_tile[0], "left"))
+				self.edges.append((first_tile, "left"))
 			if first_tile.right == 1:
-				self.edges.append((first_tile[0], "right"))
+				self.edges.append((first_tile, "right"))
 		elif self.type == 2:
 			if first_tile.up == 2:
-				self.edges.append((first_tile[0], "up"))
+				self.edges.append((first_tile, "up"))
 			if first_tile.down == 2:
-				self.edges.append((first_tile[0], "down"))
+				self.edges.append((first_tile, "down"))
 			if first_tile.left == 2:
-				self.edges.append((first_tile[0], "left"))
+				self.edges.append((first_tile, "left"))
 			if first_tile.right == 2:
-				self.edges.append((first_tile[0], "right"))
+				self.edges.append((first_tile, "right"))
 
 	
 	def extend_structure(self, row, col, tile, board):
@@ -214,7 +214,7 @@ class structures:
 		self.players.append(player)
 
 	#check if new tile belongs in this structure
-	def check_structure_compatability(self, tile, row, col, board):
+	def check_structure_compatability(self,  row, col, tile, board):
 		connections = []
 
 		neighbors = {
@@ -277,10 +277,48 @@ class structures:
 		return False
 
 	def __repr__(self):
-		pass
+		return f"structure ={self.type}, size= {len(self.tiles_used)}"
 		
 	
 
 
 
 
+def printBoard(game):
+    width = 7
+    for row in game.board:
+        line = ""
+        for t in row:
+            if t is None:
+                line += ".".center(width)
+            else:
+                line += str(t).center(width)
+        print(line)
+
+
+
+
+#Tests
+p1 = player(0)
+p2 = player(1)
+
+game = gameStateClass([p1, p2])
+
+t1 = tile(1, 1, 0, 0, 0, 0)  # road vertical
+
+game.place_tile(3, 3, t1)
+game.manage_structures(3, 3, t1)
+
+print("Placed first tile")
+printBoard(game)
+
+t2 = tile(1, 1, 0, 0, 0, 0)  # road vertical
+
+game.place_tile(2, 3, t2)
+
+game.manage_structures(2, 3, t2)
+
+print("After extending road upward")
+printBoard(game)
+
+print(game.structures)
