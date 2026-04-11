@@ -348,3 +348,7 @@ tile_set = {
     "ID334": tile(1, 1, 2, 0, 1, 0),
     "ID335": tile(0, 2, 1, 1, 1, 0),
 }
+
+# func to map ID to each item for use in print testing in game engine
+for key, t in tile_set.items():
+    t.tile_id = key

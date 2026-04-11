@@ -122,32 +122,53 @@ remaining_pieces = 82
 
 current_turn = 1
 
+# func to pretty print board - testing only
+def printBoard(game):
+    width = 7
+    for row in game.board:
+        line = ""
+        for t in row:
+            if t is None:
+                line += ".".center(width)
+            else:
+                line += t.tile_id.center(width)
+        print(line)
 
 #Function that is first called upon game start. launches the API and waits for a POST to /start
 def gameStart():
-    api_thread = threading.Thread(target=start_api, daemon=True)
-    api_thread.start()
-    print("API running on http://127.0.0.1:1234, waiting for POST /start to begin game")
+    # api_thread = threading.Thread(target=start_api, daemon=True)
+    # api_thread.start()
+    # print("API running on http://127.0.0.1:1234, waiting for POST /start to begin game")
 
-    t = threading.Thread(target=Project_CV.cv_main_loop, daemon=True)
-    t.start()
+    # t = threading.Thread(target=Project_CV.cv_main_loop, daemon=True)
+    # t.start()
+    # tileBag = tile_bag.tile_bag()
+
+    # api_thread.join()
+
+
+
+
+    # Old gameStart code / Testing without API interference
+    global game_state
     tileBag = tile_bag.tile_bag()
 
-    api_thread.join()
-"""
-    Old gameStart code - will be reworked to use API-driven flow
-    global game_state
-    initialiseBoard() #sets up internal board tracking, TODO: Add player count as argument
-    #checkValidBoardState() #makes sure players placed rivers right and the game is okay to start
-    game = initialiseBoard(NUM_PLAYERS) #sets up internal board tracking
+    # Remove river tiles from bag since they're pre-placed for testing
+    for tile_id, _, _ in STARTING_RIVER:
+        tileBag.remove_tile(tile_id)
+
+    game = initialiseBoard(NUM_PLAYERS)
     game_state = game
-    print(game.board)
-    meeple = 0
-    play turns until peices run out
-    #while game.remaining_pieces > 0:
-    for new_tile in TEST_GAME: #Loop only for testing the TEST_GAME list
-        playTurn(game, current_turn, new_tile, meeple)
-        current_turn += 1
+    print(f"Game started with {NUM_PLAYERS} players")
+    printBoard(game)
+
+    # play turns until pieces run out
+    while game.remaining_pieces > 0:
+        playTurn(game, tileBag)
+
+    scoreEndGame(game)
+
+    # LEGACY CODE BELOW
 
     # #play turns until peices run out
     # while game.remaining_pieces > 0:
@@ -155,22 +176,22 @@ def gameStart():
 
     # Test code to test threads replicated in another file so can be commented out for now
     # so as to not break the main file testing in engine
-    print("Starting")
-    while True:
-        if Project_CV.cv_to_engine:
-            # This is the CV communicating to the game engine
+    # print("Starting")
+    # while True:
+    #     if Project_CV.cv_to_engine:
+    #         # This is the CV communicating to the game engine
 
-            # Variables are:
-            # Project_CV.grid_coord which is a tuple (x, y)
-            # TESTING
-            print(Project_CV.tile_id) # Check game engine can access variables
-            # Project_CV.tile_id which is a number at the moment can be changed
+    #         # Variables are:
+    #         # Project_CV.grid_coord which is a tuple (x, y)
+    #         # TESTING
+    #         print(Project_CV.tile_id) # Check game engine can access variables
+    #         # Project_CV.tile_id which is a number at the moment can be changed
 
-            # At the end have
-            Project_CV.game_response = (True, 1) # 1 is a temp value as nothing has been implemented for it yet
+    #         # At the end have
+    #         Project_CV.game_response = (True, 1) # 1 is a temp value as nothing has been implemented for it yet
 
-        time.sleep(0.1)
-"""
+    #     time.sleep(0.1)
+
     
 
 #initialises internal board system
@@ -180,35 +201,107 @@ def initialiseBoard(num_players):
 
     game = gameStateClass(players)
 
-    # Commented out as i think each player will take turns placing tiles, uncomment if not the case
-    # Temp code for now
-    #for tile_id, row, col in STARTING_RIVER:
-        #game.place_tile(row, col, tile_set[tile_id])
+    # Temp code for testing river
+    for tile_id, row, col in STARTING_RIVER:
+        game.place_tile(row, col, tile_set[tile_id])
     
     
     return game
 
 
-#Runs every turn
-def playTurn(game, current_turn, tile, meeple):
+def getValidPlacements(game, tile_obj):
+    valid = []
+    for r in range(len(game.board)):
+        for c in range(len(game.board[r])):
+            if game.check_valid_placement(r, c, tile_obj):
+                valid.append((r, c))
+    return valid
 
-    checkMeeplePlaced() # check if meeple placed on valid tile played
-    checkDoneStructures() # Checks if the new tile completed a structure
-    pass
+
+#Runs every turn
+def playTurn(game, tileBag):
+    current = game.currentPlayer()
+    print(f"\n Turn {game.current_turn}, {current.returnColour()}'s turn")
+    print(f"Meeples: {current.meeples}, Score: {current.score}, Pieces left: {game.remaining_pieces}")
+
+    # Getting Tile from Player, might turn into fetch request to project CV?
+    while True:
+        tile_input = input("Enter tile ID or 'board' to see board: ").strip()
+
+        if tile_input.lower() == "board":
+            printBoard(game)
+            continue
+
+        if tile_input not in tile_set:
+            print(f"Unknown tile '{tile_input}'. Try again.")
+            continue
+
+        tile_obj = tile_set[tile_input]
+        found = tileBag.find_tile_id(tile_input)
+        if found is None:
+            print(f"Tile {tile_input} already used. Try again.")
+            continue
+
+        break
+
+
+    # Valid placements
+    valid = getValidPlacements(game, tile_obj)
+    if not valid:
+        print(f"No valid placements for {tile_input}, skipping turn")
+        tileBag.remove_tile(tile_input)
+        game.nextPlayer()
+        game.current_turn += 1
+        return
+    
+    print(f"Valid placements for {tile_input}")
+    for i, (r, c) in enumerate(valid):
+        print(f"row = {r}, col = {c}")
+
+    
+    # collect row and col from user
+    while True:
+        try:
+            r, c = map(int, input("Enter row,col: ").split(","))
+            if (r, c) not in valid:
+                print("Not valid, try again.")
+                continue
+            row, col = r, c
+            break
+        except:
+            print("Invalid, try again.")
+
+
+    # placing tile
+    game.place_tile(row, col, tile_obj)
+    tileBag.remove_tile(tile_input)
+    print(f"Placed {tile_input} at ({row}, {col})")
+
+    checkMeeplePlaced(game, current, tile_obj, row, col)
+    checkDoneStructures(game)
+
+    # Advanced to next turn
+    game.nextPlayer()
+    game.current_turn += 1
+    printBoard(game)
+
 
 
 #Check if a meeple was placed on new tile, if it is right colour and whether its on a road or city for double tiles
-def checkMeeplePlaced() :
+def checkMeeplePlaced(game, current, tile_obj, row, col) :
     pass
 
 #scans board state and checks and scores all completed structures not scored previously
-def checkDoneStructures():
+def checkDoneStructures(game):
     updateScores() #update scores for all affected players if there is a done structure
     pass
 
 
 #updates scores for every player, given player id and score add
 def updateScores():
+    pass
+
+def scoreEndGame(game):
     pass
 
 
