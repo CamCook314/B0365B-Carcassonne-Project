@@ -14,6 +14,7 @@ import threading
 import time
 import tile_bag
 
+
 #im using camelCase for functions and snake_case for variables
 
 game_state = None
@@ -282,6 +283,7 @@ def playTurn(game, tileBag):
     print(f"Placed {tile_input} at ({x}, {y})")
 
     checkMeeplePlaced(game, current, tile_obj, x, y)
+    #game.manage_structures(x, y, tile_obj)
     checkDoneStructures(game)
 
     # Advanced to next turn
