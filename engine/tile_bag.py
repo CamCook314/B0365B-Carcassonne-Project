@@ -52,10 +52,10 @@ class tile_bag:
         # Checking the bounds so no error produces from key indexing
         if lower < 0:
             print("Error, tile Id outside range")
-            return
+            return 1
         elif upper > 335:
             print("Error, tile Id outside range")
-            return
+            return 1
         
         # Got valid bounds remove the tile from the bag removing all 4 rotations
         for i in range(lower, upper + 1):
@@ -64,7 +64,7 @@ class tile_bag:
                 # Handle for error, shouldn't reach here unless
                 # AI model breaks
                 print("Error, trying to remove already removed tile")
-                return
+                return 
 
     # Function to find a tile given an ID
     def find_tile_id(self, tile_id):
@@ -124,4 +124,17 @@ class tile_bag:
         # Calculate probability
         chance = (len(match_ind_tiles) / num_tiles) * 100
         # Round for nice viewing
-        return round(chance, 2)
+        return (round(chance, 2), len(match_ind_tiles))
+    
+
+# Code to be used in individual demo
+bag = tile_bag()
+tile = bag.find_tile_id("ID20")
+print(tile)
+bag.remove_tile(20)
+print("Remove tile id 20")
+tile = bag.find_tile_id(20)
+print(tile)
+print("Find a tile that all sides are grassland")
+prediction = bag.tile_predict(0,0,0,0)
+print(f"This is a {prediction[0]} chance to get this tile and {prediction[1]} tiles remain")

@@ -13,3 +13,4 @@ opencv-python
 numpy
 open_clip-torch
 Pillow
+screeninfo
