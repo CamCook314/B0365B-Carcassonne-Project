@@ -127,9 +127,8 @@ class tile_bag:
         return (round(chance, 2), len(match_ind_tiles))
     
 
+# Code to be used in individual demo
 bag = tile_bag()
-
-
 tile = bag.find_tile_id("ID20")
 print(tile)
 bag.remove_tile(20)
