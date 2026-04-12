@@ -12,10 +12,9 @@ base_pth = Path(__file__).resolve().parent.parent
 asset_pth = base_pth / "assets" / "tile_photos"
 print(asset_pth)
 monitors = screeninfo.get_monitors()
-if len(monitors) > 1:
+if len(monitors) == 1:
     print("Projector not connected in extended mode")
     exit()
-count  = 0
 
 ran_num = random.randint(0, 335)
 
@@ -26,7 +25,7 @@ print(id_str)
 img_path = asset_pth / id_str
 
 # Change to [1] for projector
-projector = monitors[0]
+projector = monitors[1]
 test_img = cv.imread(img_path, cv.IMREAD_COLOR)
 
 cv.namedWindow("Projector", cv.WINDOW_NORMAL)
