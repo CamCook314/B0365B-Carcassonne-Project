@@ -125,25 +125,34 @@ class gameStateClass:
 		self.remaining_pieces -= 1
 
 	def manage_structures(self, row, col, tile):
-		matching_structures = []
+		connections = []
+		for type in [1,2]:
+			matching_structures = []
 
-		for structure in self.structures:
-			connections = structure.check_structure_compatability(row, col, tile, self.board)
+			for structure in self.structures:
+				if type != structure.type:
+					continue
+				connections = structure.check_structure_compatability(row, col, tile, self.board)
 
-			if connections is not None:
+			if len(connections) > 0:
 				matching_structures.append(structure)
 
 		if len(matching_structures) == 0:
-			if tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1:
-				new_struct = structures(tile, row, col, 1)
-			elif tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2:
-				new_struct = structures(tile, row, col, 2)
+			if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1):
+				self.structures.append(structures(tile, row, col, 1))
+			elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2):
+				self.structures.append(structures(tile, row, col, 2))
 			elif tile.attribute == 2: #Monastary
-				new_struct = structures(tile, row, col, 3)
-
-			self.structures.append(new_struct)
+				self.structures.append(structures(tile, row, col, 3))
 		elif len(matching_structures) == 1:
 			matching_structures[0].extend_structure(row, col, tile, self.board)
+		elif len(matching_structures) == 2:
+			pass #This is where merging happens
+
+		for structure in self.structures:
+			if structure.check_completed(self.board):
+				structure.score_structure()
+				self.structures.remove(structure)
 
 	def next_player(self):
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
