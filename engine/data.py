@@ -360,28 +360,28 @@ def printBoard(game):
 
 
 
+if __name__ == "__main__":
+	#Tests
+	p1 = player(0)
+	p2 = player(1)
 
-#Tests
-p1 = player(0)
-p2 = player(1)
+	game = gameStateClass([p1, p2])
 
-game = gameStateClass([p1, p2])
+	t1 = tile(1, 1, 0, 0, 0, 0)  # road vertical
 
-t1 = tile(1, 1, 0, 0, 0, 0)  # road vertical
+	game.place_tile(3, 3, t1)
+	game.manage_structures(3, 3, t1)
 
-game.place_tile(3, 3, t1)
-game.manage_structures(3, 3, t1)
+	print("Placed first tile")
+	printBoard(game)
 
-print("Placed first tile")
-printBoard(game)
+	t2 = tile(1, 1, 0, 0, 0, 0)  # road vertical
 
-t2 = tile(1, 1, 0, 0, 0, 0)  # road vertical
+	game.place_tile(3, 4, t2)
 
-game.place_tile(3, 4, t2)
+	game.manage_structures(3, 4, t2)
 
-game.manage_structures(3, 4, t2)
+	print("After extending road upward")
+	printBoard(game)
 
-print("After extending road upward")
-printBoard(game)
-
-print(game.structures)
+	print(game.structures)

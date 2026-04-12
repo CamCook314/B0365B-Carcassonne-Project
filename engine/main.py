@@ -3,7 +3,6 @@ import sys
 import os
 from data import tile, player, gameStateClass
 from tile_set import tile_set
-from flask import Flask, jsonify, request
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 try:
@@ -14,90 +13,6 @@ import threading
 import time
 import tile_bag
 
-
-#im using camelCase for functions and snake_case for variables
-
-game_state = None
-
-# Flask API stuff
-app = Flask(__name__)
-app.json.sort_keys = False
-
-#returns the game state the website requests to /gamestate at port 1234
-@app.route('/gamestate', methods=['GET'])
-def get_gamestate():
-    if game_state is None:
-        return jsonify({"error": "Game not started"}), 503
-
-    board_serialised = {}
-    for (x, y), t in game_state.get_board_xy().items():
-        board_serialised[f"{x},{y}"] = {
-                    "up": t.up,
-                    "down": t.down,
-                    "left": t.left,
-                    "right": t.right,
-                    "feature_continues": t.feature_continues,
-                    "attribute": t.attribute,
-                    "meeple_attached": t.meeple_attached,
-                }
-
-    players_serialised = []
-    for p in game_state.players:
-        players_serialised.append({
-            "colour": p.return_colour(),
-            "meeples": p.meeples,
-            "score": p.score,
-        })
-
-    return jsonify({
-        "board": board_serialised,
-        "players": players_serialised,
-        "current_player": game_state.currentIndex,
-        "remaining_pieces": game_state.remaining_pieces,
-        "current_turn": game_state.current_turn,
-    })
-
-
-# starts the game when a POST request is sent to /start
-@app.route('/start', methods=['POST'])
-def start_game():
-    global game_state
-
-    if game_state is not None:
-        return jsonify({"error": "Game already started"}), 400
-
-    data = request.get_json()
-    if data is None or "players" not in data:
-        return jsonify({"error": "Missing 'players' field"}), 400
-
-    num_players = data["players"]
-    if not isinstance(num_players, int) or num_players < 2 or num_players > 5:
-        return jsonify({"error": "Players must be between 2 and 5"}), 400
-
-    game_state = initialiseBoard(num_players)
-
-
-
-
-    # TESTING: Place river tiles on the board at start
-    for tile_id, x, y in STARTING_RIVER:
-        try:
-            game_state.place_tile(x, y, tile_set[tile_id])
-        except ValueError:
-            print(f"Skipping invalid river tile {tile_id} at ({x}, {y})")
-
-    # TESTING: Place test tiles on the board at start
-    for tile_id, x, y in TEST_GAME:
-        try:
-            game_state.place_tile(x, y, tile_set[tile_id])
-        except ValueError:
-            print(f"Skipping invalid test tile {tile_id} at ({x}, {y})")
-
-    return jsonify({"message": f"Game started with {num_players} players"}), 201
-
-
-def start_api():
-    app.run(host="127.0.0.1", port=1234, threaded=True)
 
 NUM_PLAYERS = 3
 
@@ -137,19 +52,6 @@ def printBoard(game):
 
 #Function that is first called upon game start. launches the API and waits for a POST to /start
 def gameStart():
-    # api_thread = threading.Thread(target=start_api, daemon=True)
-    # api_thread.start()
-    # print("API running on http://127.0.0.1:1234, waiting for POST /start to begin game")
-
-    # t = threading.Thread(target=Project_CV.cv_main_loop, daemon=True)
-    # t.start()
-    # tileBag = tile_bag.tile_bag()
-
-    # api_thread.join()
-
-
-
-
     # Old gameStart code / Testing without API interference
     global game_state
     tileBag = tile_bag.tile_bag()
