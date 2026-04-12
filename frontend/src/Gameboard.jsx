@@ -8,14 +8,12 @@ export default function GameBoard({ tiles }) {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   // Tile size in pixels
-  const ts = 50;
+  const ts = 51;
 
-  // Center the board: offset so (0,0) appears roughly in the middle
-  // These shift the whole board so tiles aren't jammed in the top-left
-  const offsetX = 400;
-  const offsetY = 200;
+  const offsetX = 42;
+  const offsetY = 2;
 
-  // --- Pan handlers ---
+  // Panning
   const onDown = (e) => {
     if (e.target.closest(".board-btn")) return;
     setIsDragging(true);
@@ -63,7 +61,7 @@ export default function GameBoard({ tiles }) {
               className="tile"
               style={{
                 left: offsetX + t.col * ts,
-                top: offsetY - t.row * ts, // flip Y: game uses y-up, screen uses y-down
+                top: offsetY - t.row * ts,
               }}
               title={`${t.tileId} (${t.col}, ${t.row})`}
             >

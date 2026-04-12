@@ -4,7 +4,6 @@ import { getGameState, startGame } from "./api";
 import GameBoard from "./Gameboard";
 import "./App2.css";
 
-// Player colors — matches the engine's player indices
 const PLAYER_COLORS = ["#BF616A", "#81A1C1", "#A3BE8C", "#EBCB8B", "#B48EAD"];
 
 export default function App2() {
@@ -37,7 +36,7 @@ export default function App2() {
     }
   };
 
-  // Fetch on mount, then poll every 2 seconds
+  // Fetch on mount
   useEffect(() => {
     fetchState();
     const interval = setInterval(fetchState, 2000);
@@ -61,7 +60,7 @@ export default function App2() {
   const currentPlayer = gameState?.current_player || 0;
   const remaining = gameState?.remaining_pieces || 0;
 
-  // --- Not started screen ---
+  // --- Entry screen ---
   if (!loading && !gameState) {
     return (
       <div className="app">
@@ -135,9 +134,7 @@ export default function App2() {
         </div>
       </header>
 
-      {/* 3-Column Layout */}
       <div className="grid">
-        {/* LEFT */}
         <div className="col">
           {/* Players */}
           <div className="card card-players">
@@ -174,7 +171,7 @@ export default function App2() {
             </div>
           </div>
 
-          {/* Activity Log — placeholder until you track moves */}
+          {/* Activity Log */}
           <div className="card card-log">
             <div className="card-header">
               <span>Activity Log</span>
@@ -188,7 +185,7 @@ export default function App2() {
           </div>
         </div>
 
-        {/* CENTRE */}
+        {/* gameboard */}
         <div className="col">
           <GameBoard tiles={boardTiles} />
 
@@ -212,7 +209,7 @@ export default function App2() {
           </div>
         </div>
 
-        {/* RIGHT */}
+
         <div className="col">
           {/* Detected Tile */}
           <div className="card card-detect">

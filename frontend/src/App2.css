@@ -1,5 +1,4 @@
 /* App2.css */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Source+Code+Pro:wght@400;600&display=swap');
 
 :root {
   --bg: #2E3440;
@@ -24,9 +23,11 @@ body {
   font-family: 'Outfit', sans-serif;
 }
 
-.app { padding: 16px; min-height: 100vh; }
+.app { 
+  padding: 16px;
+  min-height: 100vh; 
+  }
 
-/* Header */
 .header {
   max-width: 1400px;
   margin: 0 auto 16px;
@@ -55,20 +56,6 @@ body {
   text-transform: uppercase;
 }
 
-.live-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--green);
-  display: inline-block;
-  margin-right: 6px;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
 /* Layout */
 .grid {
   max-width: 1400px;
@@ -84,14 +71,12 @@ body {
   gap: 10px;
 }
 
-/* Card base */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
-
 
 .card-header {
   padding: 10px 14px;
@@ -119,7 +104,6 @@ body {
   background-color: #2E3440;
 }
 
-/* Players */
 .player-row {
   display: flex;
   align-items: center;
@@ -151,7 +135,7 @@ body {
   font-weight: 600;
 }
 
-/* Log */
+
 .log-entry {
   display: flex;
   gap: 8px;
