@@ -32,7 +32,7 @@ while cap.isOpened():
     contours, tiers = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
     # Get largest contours
-    large_contours = sorted(contours, key = cv.contourArea, reverse = True)[:2]
+    large_contours = sorted(contours, key = cv.contourArea, reverse = True)
     final_contours = []
 
     #print(large_contours)
@@ -46,12 +46,12 @@ while cap.isOpened():
             # Rectangle or Square
             (x, y, w, h) = cv.boundingRect(sides)
             ar = w / float(h)
-            if ar >= 0.9 and ar <= 1.1:
+            if ar >= 0.8 and ar <= 1.2:
                 # Aspect ratio correct - real shape
                 roi = frame[y:y+h, x:x+w]
                 # Saves region of iterest and then saves
                 # Will eventually trigger AI model instead of saving
-                cv.imwrite("img%i.jpg" %i, roi)
+                #cv.imwrite("img%i.jpg" %i, roi)
                 i += 1
                 final_contours.append(sides)
 
@@ -60,10 +60,10 @@ while cap.isOpened():
     img_contours = cv.drawContours(frame.copy(), large_contours, -1, (0, 0, 255), 2)
 
     # Show shapes on image
-    img_final = cv.drawContours(frame.copy(), final_contours, -1, (0, 0, 255), 2)
+    #img_final = cv.drawContours(frame.copy(), final_contours, -1, (0, 0, 255), 2)
 
     # Display image
-    cv.imshow("Camera", img_final)
+    cv.imshow("Camera", img_contours)
     
     # Exit if pressed - exit button
     c = cv.waitKey(10)
