@@ -1,4 +1,3 @@
-// GameBoard.jsx
 import { useState, useEffect, useCallback } from "react";
 
 export default function GameBoard({ tiles }) {
@@ -7,7 +6,7 @@ export default function GameBoard({ tiles }) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  // Tile size in pixels
+  // tile size in pixels and offsets for centering
   const ts = 51;
 
   const offsetX = 42;
@@ -76,7 +75,6 @@ export default function GameBoard({ tiles }) {
                     objectFit: "cover",
                   }}
                   onError={(e) => {
-                    // Fallback if image missing
                     e.target.style.display = "none";
                     e.target.parentElement.textContent = t.tileId;
                   }}

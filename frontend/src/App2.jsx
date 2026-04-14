@@ -1,4 +1,3 @@
-// App2.jsx
 import { useState, useEffect } from "react";
 import { getGameState, startGame } from "./api";
 import GameBoard from "./Gameboard";
@@ -18,7 +17,7 @@ export default function App2() {
       setGameState(data);
       setError(null);
     } catch (err) {
-      // Game not started yet — that's fine
+      // Game not started yet
       setError(err.message);
       setGameState(null);
     } finally {
@@ -26,7 +25,7 @@ export default function App2() {
     }
   };
 
-  // Start a new game
+  // start a new game
   const handleStart = async (numPlayers) => {
     try {
       await startGame(numPlayers);
@@ -36,22 +35,17 @@ export default function App2() {
     }
   };
 
-  // Fetch on mount
+  // start fetching on mount
   useEffect(() => {
     fetchState();
     const interval = setInterval(fetchState, 2000);
     return () => clearInterval(interval);
   }, []);
 
-  // Convert API board data to array for GameBoard
-  const boardTiles = gameState
-    ? Object.entries(gameState.board).map(([key, tile]) => {
+  // convert API board data to array for GameBoard
+  const boardTiles = gameState ? Object.entries(gameState.board).map(([key, tile]) => {
         const [col, row] = key.split(",").map(Number);
-        return {
-          col,
-          row,
-          tileId: tile.tile_id,
-        };
+        return {col,row,tileId: tile.tile_id,};
       })
     : [];
 
@@ -60,7 +54,7 @@ export default function App2() {
   const currentPlayer = gameState?.current_player || 0;
   const remaining = gameState?.remaining_pieces || 0;
 
-  // --- Entry screen ---
+  // entry screens for picking player numbers for api
   if (!loading && !gameState) {
     return (
       <div className="app">
@@ -70,9 +64,7 @@ export default function App2() {
         <div style={{ textAlign: "center", marginTop: 80 }}>
           <h2 style={{ marginBottom: 16, color: "var(--text)" }}>No Game Running</h2>
           <p style={{ color: "var(--dim)", marginBottom: 24 }}>
-            {error === "Game not started"
-              ? "Start a new game to begin."
-              : `API error: ${error}. Is the backend running?`}
+            {error === "Game not started" ? "Start a new game to begin." : `API error: ${error}. Is the backend running?`}
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             {[2, 3, 4, 5].map((n) => (
@@ -99,7 +91,7 @@ export default function App2() {
     );
   }
 
-  // --- Loading ---
+  // loading
   if (loading) {
     return (
       <div className="app">
@@ -110,7 +102,7 @@ export default function App2() {
     );
   }
 
-  // --- Game running ---
+  // Game running
   return (
     <div className="app">
       {/* Header */}

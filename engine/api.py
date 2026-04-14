@@ -1,7 +1,3 @@
-# engine/api.py
-# Just the Flask routes - imports all game logic from main.py
-# Usage: cd engine && pip install flask-cors && python api.py
- 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from tile_set import tile_set
@@ -10,7 +6,7 @@ from main import initialiseBoard, get_valid_placements, STARTING_RIVER
  
 app = Flask(__name__)
 app.json.sort_keys = False
-CORS(app)  # lets React on localhost:5173 talk to this on localhost:1234
+CORS(app)
  
 game_state = None
 tile_bag_instance = None
@@ -71,8 +67,6 @@ def start_game():
     for tile_id, _, _ in STARTING_RIVER:
         tile_bag_instance.remove_tile(tile_id)
  
-    return jsonify({"message": f"Game started with {num_players} players"}), 201
-
 if __name__ == "__main__":
     print("API running on http://127.0.0.1:1234")
     app.run(host="127.0.0.1", port=1234, debug=True)
