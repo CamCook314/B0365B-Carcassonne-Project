@@ -89,20 +89,26 @@ class GridTracker:
             return 0
         return cv.countNonZero(blob_mask[y1:y2, x1:x2])
 
-    def best_coverage_slot(self, diff_mask):
-        """Return the open slot with the highest diff-pixel coverage, or None.
+    def closest_slot(self, diff_cx, diff_cy):
+        """Return the open slot whose predicted pixel centre is closest to the
+        diff centroid, or None if no slot is within one tile-width.
 
-        Scores every open slot by how many newly-placed pixels fall within its
-        expected bounding box.  More robust than centroid detection because a
-        displacement of up to half a tile width still picks the correct slot.
+        Using the diff centroid directly is more robust than pixel-counting
+        in sat_in_diff: MORPH_CLOSE inflates the board blob so the diff region
+        spreads well beyond the actual new tile, causing pixel counts to be
+        unreliable.  The centroid of the raw diff mask sits on the new tile.
         """
-        if self.a is None:
+        if self.a is None or diff_cx is None or diff_cy is None:
             return None
-        best_slot, best_cov = None, 0
+        best_slot, best_dist = None, float('inf')
         for slot in self.open_slots():
-            cov = self.cell_coverage(diff_mask, *slot)
-            if cov > best_cov:
-                best_cov, best_slot = cov, slot
+            px = self.origin_px[0] + slot[0] * self.a + slot[1] * self.b
+            py = self.origin_px[1] + slot[0] * self.b - slot[1] * self.a
+            dist = float(np.hypot(px - diff_cx, py - diff_cy))
+            if dist < best_dist:
+                best_dist, best_slot = dist, slot
+        if best_slot is None or best_dist > self.tile_size_px:
+            return None
         return best_slot
 
     def slot_centroid(self, diff_mask, gx, gy):
@@ -155,7 +161,7 @@ class GridTracker:
         this gives 2N equations and 4 unknowns, so the fit improves with each
         placement and corrects both drift and rotation simultaneously.
         """
-        if len(self.tile_centroids) < 2:
+        if len(self.tile_centroids) < 3:
             return
         rows_A, rhs = [], []
         for (gx, gy), (px, py) in self.tile_centroids.items():
