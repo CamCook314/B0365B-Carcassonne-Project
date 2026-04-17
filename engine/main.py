@@ -178,15 +178,16 @@ def playTurn(game, tileBag):
         except:
             print("Invalid, try again.")
 
-
+    
     # placing tile
     game.place_tile(x, y, tile_obj)
     tileBag.remove_tile(tile_input)
     print(f"Placed {tile_input} at ({x}, {y})")
 
-    checkMeeplePlaced(game, current, tile_obj, x, y)
-    #game.manage_structures(x, y, tile_obj)
-    checkDoneStructures(game)
+    game.manage_structures(x, y, tile_obj)
+
+    #assuming tile obj already has meeple_attached populated or not populated
+    game.place_meeple(tile_obj)
 
     # Advanced to next turn
     game.next_player()
@@ -195,22 +196,34 @@ def playTurn(game, tileBag):
 
 
 
-#Check if a meeple was placed on new tile, if it is right colour and whether its on a road or city for double tiles
-def checkMeeplePlaced(game, current, tile_obj, x, y) :
-    pass
-
-#scans board state and checks and scores all completed structures not scored previously
-def checkDoneStructures(game):
-    updateScores() #update scores for all affected players if there is a done structure
-    pass
-
-
-#updates scores for every player, given player id and score add
-def updateScores():
-    pass
-
 def scoreEndGame(game):
-    pass
+    for struct in game.structures:
+        temp_score = 0
+        if struct.type == 1:
+            temp_score += len(struct.tiles_used)
+            for players in struct.players:
+                players.score += temp_score
+        elif struct.type == 2:
+            for tiles in struct.tiles_used:
+                if tiles.attribute == 1:
+                    temp_score += 2
+                else:
+                    temp_score += 1
+            for players in struct.players:
+                players.score += temp_score
+        elif struct.type == 3:
+            row = struct.tiles_used[0][1]
+            col = struct.tiles_used[0][2]
+            all_neighbors = [
+				(row - 1, col - 1), (row - 1, col), (row - 1, col + 1),
+				(row,   col - 1), (row,   col), (row,   col + 1),
+				(row + 1, col - 1), (row + 1, col), (row + 1, col + 1)]
+            for nr, nc in all_neighbors:
+                if game.board[nr][nc] is not None:
+                    temp_score += 1
+            for players in struct.players: # should only be one player tho
+                players.score += temp_score
+
 
 
 # Test Game

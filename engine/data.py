@@ -126,6 +126,7 @@ class gameStateClass:
 
 	#player is None if no meeple added
 	def manage_structures(self, row, col, tile, player):
+
 		new_row, new_col = self.to_array_index(row, col)
 		connections = []	
 		for type in [1,2]: # to check for tiles with 2 structure types
@@ -192,7 +193,7 @@ class gameStateClass:
 		return self.players[self.currentIndex]
 
 	#Place meeple on tile and where on tile if it has multiple places
-	def place_meeple(self, tile, up, down, left, right):
+	def place_meeple(self, tile):
 		if tile.meeple_attached[0] == 1:
 			raise ValueError("Meeple already placed on this tile")
 
@@ -203,6 +204,21 @@ class gameStateClass:
 		tile.meeple_attached = (1, up, down, left, right)
 		player.meeples -= 1
 
+		directs = []
+		if tile.meeple_attached[1] == 1:
+			directs.append("up")
+		elif tile.meeple_attached[2] == 1:
+			directs.append("down")
+		elif tile.meeple_attached[3] == 1:
+			directs.append("left")
+		elif tile.meeple_attached[4] == 1:
+			directs.append("right")
+
+		for direction in directs:
+			for structure in self.structures:
+				if (tile, direction) in structure.edges:
+					structure.add_player(self.current_player())
+					break
 
 
 	def check_valid_placement(self, x, y, tile):
