@@ -229,13 +229,13 @@ class gameStateClass:
 	def check_valid_placement(self, x, y, tile):
 		array_row, array_col = self.to_array_index(x, y)
 
-		# Position must be within bounds
-		if array_row < 0 or array_row >= len(self.board) or array_col < 0 or array_col >= len(self.board[0]):
-			return False
-
-		# Position must be empty
-		if self.board[array_row][array_col] is not None:
-			return False
+		# Check if position is within current board boundaries
+		# If in bounds, position must be empty. Out of bounds is always empty (board will expand).
+		if array_row >= 0 and array_row < len(self.board):
+			if array_col >= 0 and array_col < len(self.board[0]):
+				
+				if self.board[array_row][array_col] is not None:
+					return False
 
 		# values mean (neighbor_row, neighbor_col), opposite_side, my_edge
 		neighbors = {
