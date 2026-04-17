@@ -124,31 +124,62 @@ class gameStateClass:
 		self.board[array_row][array_col] = tile
 		self.remaining_pieces -= 1
 
-	def manage_structures(self, row, col, tile):
-		connections = []
-		for type in [1,2]:
+	#player is None if no meeple added
+	def manage_structures(self, row, col, tile, player):
+		new_row, new_col = self.to_array_index(row, col)
+		connections = []	
+		for type in [1,2]: # to check for tiles with 2 structure types
+			
 			matching_structures = []
 
 			for structure in self.structures:
 				if type != structure.type:
 					continue
-				connections = structure.check_structure_compatability(row, col, tile, self.board)
+				connections = structure.check_structure_compatability(new_row, new_col, tile, self.board)
+				
+				if len(connections) > 0:
+					matching_structures.append((structure, connections))
+				print("len of matching structures is, " + str(len(matching_structures)))
+			if len(matching_structures) == 0:
+				if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1):
+					temp_struct = structures(tile, new_row, new_col, 1)
+					if player is not None:
+						temp_struct.add_player(player)
+					self.structures.append(temp_struct)
+				elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2):
+					temp_struct = structures(tile, new_row, new_col, 2)
+					if player is not None:
+						temp_struct.add_player(player)
+					self.structures.append(temp_struct)
+			elif len(matching_structures) == 1:
+				struct, _ = matching_structures[0]
+				if player is not None:
+					struct.add_player(player)
+				struct.extend_structure(new_row, new_col, tile, self.board)
+			elif len(matching_structures) >= 2:
+				all_tiles = []
+				all_edges = []
+				all_players = []
+				for struct, _ in matching_structures:
+					all_tiles += struct.tiles_used
+					all_players += struct.players
+					all_edges += struct.edges
+					self.structures.remove(struct)
+				new_struct = structures(all_tiles[0][0], all_tiles[0][1], all_tiles[0][2], matching_structures[0][0].type)
+				new_struct.players = all_players
+				new_struct.tiles_used = all_tiles
+				
+				new_struct.edges = all_edges
+				new_struct.extend_structure(new_row, new_col, tile, self.board)
 
-			if len(connections) > 0:
-				matching_structures.append(structure)
+				self.structures.append(new_struct)
 
-		if len(matching_structures) == 0:
-			if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1):
-				self.structures.append(structures(tile, row, col, 1))
-			elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2):
-				self.structures.append(structures(tile, row, col, 2))
-			elif tile.attribute == 2: #Monastary
-				self.structures.append(structures(tile, row, col, 3))
-		elif len(matching_structures) == 1:
-			matching_structures[0].extend_structure(row, col, tile, self.board)
-		elif len(matching_structures) == 2:
-			pass #This is where merging happens
-
+		if tile.attribute == 2: #Monastary
+			#Monastary detected
+			temp_struct = structures(tile, new_row, new_col, 3)
+			if player is not None:
+				temp_struct.add_player(player)
+				self.structures.append(temp_struct)
 		for structure in self.structures:
 			if structure.check_completed(self.board):
 				structure.score_structure()
@@ -258,11 +289,13 @@ class structures:
 	
 	def extend_structure(self, row, col, tile, board):
 		# Check monastary differently
+		print("extending")
 		if self.type == 3:
 			return
 		self.tiles_used.append((tile, row, col)) # for scoring
 		
 		neighbors = {
+
 			"up":    ((row - 1, col), "down",  tile.up),
 			"down":  ((row + 1, col), "up",    tile.down),
 			"left":  ((row, col - 1), "right", tile.left),
@@ -296,17 +329,18 @@ class structures:
 			"right": ((row, col + 1), "left",  tile.right),
 		}
 
-		for (nr, nc), opposite_side, my_edge in neighbors.values():
+		for direction, ((nr, nc), opposite_side, my_edge) in neighbors.items():
 			if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]):
 				continue
 			neighbor = board[nr][nc]
 
-			if neighbor is None:
+			if neighbor is None or my_edge != self.type or getattr(neighbor, opposite_side) != self.type:
 				continue
 
-			if my_edge == self.type and getattr(neighbor, opposite_side) == self.type:
-				if (neighbor, opposite_side) in self.edges:
-					connections.append((neighbor, opposite_side))
+			for tile1, row1, col1 in self.tiles_used:
+				if tile1 is neighbor and row1 == nr and col1 == nc:
+					connections.append(direction)
+					break
 
 		return connections
 
@@ -316,7 +350,7 @@ class structures:
 			return
 
 		temp_score = 0
-		for tile in self.tiles_used:
+		for tile, row, col in self.tiles_used:
 			if self.type == 1:
 				temp_score += 1
 				continue
@@ -376,21 +410,68 @@ if __name__ == "__main__":
 
 	game = gameStateClass([p1, p2])
 
-	t1 = tile(1, 1, 0, 0, 0, 0)  # road vertical
+	t1 = tile(1, 1, 0, 0, 1, 0)  # road vertical
+	t3 = tile(1, 0, 0, 0, 0, 0) # tile up end
+	t4 = tile(0,1,0,0,0,0) #tile down end
 
+	t5 = tile(0,0,0,0,0,2) #monastary tile
+	
 	game.place_tile(3, 3, t1)
-	game.manage_structures(3, 3, t1)
+	game.manage_structures(3, 3, t1, p1)
 
 	print("Placed first tile")
 	printBoard(game)
 
-	t2 = tile(1, 1, 0, 0, 0, 0)  # road vertical
+	game.place_tile(4, 3, t1)
+	game.manage_structures(4, 3, t1, None)
 
-	game.place_tile(3, 4, t2)
+	print("Placed second tile")
+	printBoard(game)
+	print(game.structures)
 
-	game.manage_structures(3, 4, t2)
+	game.place_tile(4, 2, t1)
+	game.manage_structures(4, 2, t1, None)
+	
+
+	print("Placed third tile")
+	printBoard(game)
+	print(game.structures)
+
+	game.place_tile(4, 1, t1)
+	game.manage_structures(4, 1, t1, p1)
+
+	print("Placed fourth tile")
+	printBoard(game)
+	print(game.structures)
+
+	game.place_tile(3, 1, t3)
+	game.manage_structures(3, 1, t3, None)
+
+	print("Placed fifth tile")
+	printBoard(game)
+	print(game.structures)
+	#error here, tile added to wrong structure
+
+	game.place_tile(3, 4, t4)
+	game.manage_structures(3, 4, t4, None)
+
+	
+
+	print("after finishing structure and adding monastry")
+	printBoard(game)
+
+	print(game.structures)
+
+
+	t2 = tile(1, 1, 0, 0, 1, 0)  # road vertical
+	game.place_tile(3, 2, t2)
+
+	game.manage_structures(3, 2, t2, p2)
 
 	print("After extending road upward")
 	printBoard(game)
 
 	print(game.structures)
+
+	print("Player 1 score is " + str(p1.score))
+	print("Player 2 score is " + str(p2.score))
