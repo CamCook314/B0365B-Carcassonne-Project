@@ -125,6 +125,21 @@ def get_valid_placements(game, tile_obj):
         valid.append((0, 0))
     return list(set(valid))
 
+def get_valid_placements_all_rotations(game, base_tile_num):
+    base = base_tile_num * 4
+    all_valid = {}
+    
+    for r in range(4):
+        rid = f"ID{base + r}"
+        if rid not in tile_set:
+            continue
+        tile_obj = tile_set[rid]
+        valid = get_valid_placements(game, tile_obj)
+        for x, y in valid:
+            if (x, y) not in all_valid:
+                all_valid[(x, y)] = rid
+    
+    return all_valid
 
 #Runs every turn
 def playTurn(game, tileBag):

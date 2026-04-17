@@ -1,41 +1,50 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
+import "./GameBoard.css";
 
-export default function GameBoard({ tiles }) {
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+const PLAYER_COLORS = ["#BF616A", "#81A1C1", "#A3BE8C", "#EBCB8B", "#B48EAD"];
+const CELL = 52; // tile size + gap
 
-  // tile size in pixels and offsets for centering
-  const ts = 51;
+export default function GameBoard({ tiles = [], meeples = [], validPlacements = [], onTileClick }) {
+  const [selectedTile, setSelectedTile] = useState(null);
 
-  const offsetX = 42;
-  const offsetY = 2;
+  const { placedTiles, ghostTiles, width, height } = useMemo(() => {
+    const allCols = [...tiles.map(t => t.col), ...validPlacements.map(v => v[0])];
+    const allRows = [...tiles.map(t => t.row), ...validPlacements.map(v => v[1])];
 
-  // Panning
-  const onDown = (e) => {
-    if (e.target.closest(".board-btn")) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-  };
+    if (!allCols.length) return { placedTiles: [], ghostTiles: [], width: 0, height: 0 };
 
-  const onMove = useCallback(
-    (e) => {
-      if (isDragging) setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
-    },
-    [isDragging, dragStart]
-  );
+    const minCol = Math.min(...allCols);
+    const maxCol = Math.max(...allCols);
+    const minRow = Math.min(...allRows);
+    const maxRow = Math.max(...allRows);
 
-  const onUp = useCallback(() => setIsDragging(false), []);
+    const px = (col, row) => ({ left: (col - minCol) * CELL, top: (maxRow - row) * CELL });
 
-  useEffect(() => {
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+    return {
+      placedTiles: tiles.map(t => ({ ...t, ...px(t.col, t.row) })),
+      ghostTiles: validPlacements.map(([x, y]) => ({ col: x, row: y, ...px(x, y) })),
+      width: (maxCol - minCol + 1) * CELL,
+      height: (maxRow - minRow + 1) * CELL,
     };
-  }, [onMove, onUp]);
+  }, [tiles, validPlacements]);
+
+  const meepleLookup = useMemo(() => {
+    const map = {};
+    for (const m of meeples) {
+      const key = `${m.col},${m.row}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(m);
+    }
+    return map;
+  }, [meeples]);
+
+  const handleClick = (tile) => {
+    setSelectedTile(prev =>
+      prev && prev.col === tile.col && prev.row === tile.row ? null : tile
+    );
+    onTileClick?.(tile);
+  };
 
   return (
     <div className="card card-board" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -44,58 +53,65 @@ export default function GameBoard({ tiles }) {
         <span className="card-tag">{tiles.length} TILES</span>
       </div>
 
-      <div className="board-wrap" onMouseDown={onDown}>
-        <div
-          className="board-canvas"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: "center center",
-          }}
-        >
-          <div className="board-grid" />
+      <div className="board-wrap">
+        <TransformWrapper initialScale={1} minScale={0.2} maxScale={4} centerOnInit wheel={{ step: 0.08 }} panning={{ velocityDisabled: true }}>
+          {({ zoomIn, zoomOut, resetTransform }) => (
+            <>
+              <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width, height, position: "relative" }}>
 
-          {tiles.map((t, i) => (
-            <div
-              key={i}
-              className="tile"
-              style={{
-                left: offsetX + t.col * ts,
-                top: offsetY - t.row * ts,
-              }}
-              title={`${t.tileId} (${t.col}, ${t.row})`}
-            >
-              {t.tileId ? (
-                <img
-                  src={`/tiles/${t.tileId}.jpg`}
-                  alt={t.tileId}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    borderRadius: 3,
-                    objectFit: "cover",
-                  }}
-                  onError={(e) => {
-                    e.target.style.display = "none";
-                    e.target.parentElement.textContent = t.tileId;
-                  }}
-                />
-              ) : (
-                <span>?</span>
-              )}
+                {/* Ghost tiles (valid placements) */}
+                {ghostTiles.map(g => (
+                  <div key={`g-${g.col},${g.row}`} className="tile tile-ghost" style={{ left: g.left, top: g.top }} title={`Valid: (${g.col}, ${g.row})`}>
+                    <span className="ghost-plus">+</span>
+                  </div>
+                ))}
+
+                {/* Placed tiles */}
+                {placedTiles.map(t => (
+                  <div
+                    key={`${t.col},${t.row}`}
+                    className={`tile${selectedTile?.col === t.col && selectedTile?.row === t.row ? " tile-selected" : ""}`}
+                    style={{ left: t.left, top: t.top }}
+                    title={`${t.tileId} (${t.col}, ${t.row})`}
+                    onClick={e => { e.stopPropagation(); handleClick(t); }}
+                  >
+                    {t.tileId ? (
+                      <img src={`/tiles/${t.tileId}.jpg`} alt={t.tileId} draggable={false}
+                        style={{ width: "100%", height: "100%", borderRadius: 3, objectFit: "cover" }}
+                        onError={e => { e.target.style.display = "none"; e.target.parentElement.textContent = t.tileId; }}
+                      />
+                    ) : <span style={{ fontSize: 11, color: "var(--dim)" }}>?</span>}
+
+                    {(meepleLookup[`${t.col},${t.row}`] || []).map((m, i) => (
+                      <div key={i} className={`meeple meeple-${m.side || "center"}`} style={{ background: PLAYER_COLORS[m.playerIndex] || "#888" }} />
+                    ))}
+                  </div>
+                ))}
+
+              </TransformComponent>
+
+              <div className="board-controls">
+                <button className="board-btn" onClick={() => zoomIn()}>+</button>
+                <button className="board-btn" onClick={() => zoomOut()}>−</button>
+                <button className="board-btn" onClick={() => resetTransform()}>⌂</button>
+              </div>
+              <div className="board-info">{tiles.length} tiles</div>
+            </>
+          )}
+        </TransformWrapper>
+
+        {selectedTile && (
+          <div className="tile-popup">
+            <div className="tile-popup-header">
+              <span>TILE INFO</span>
+              <button className="tile-popup-close" onClick={() => setSelectedTile(null)}>×</button>
             </div>
-          ))}
-        </div>
-
-        {/* Controls */}
-        <div className="board-controls">
-          <button className="board-btn" onClick={() => setZoom((z) => Math.min(z + 0.15, 2.5))}>+</button>
-          <button className="board-btn" onClick={() => setZoom((z) => Math.max(z - 0.15, 0.4))}>−</button>
-          <button className="board-btn" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>⌂</button>
-        </div>
-
-        <div className="board-info">
-          {(zoom * 100).toFixed(0)}% · {tiles.length} tiles
-        </div>
+            <div className="tile-popup-body">
+              <div><strong>ID:</strong> {selectedTile.tileId}</div>
+              <div><strong>Pos:</strong> ({selectedTile.col}, {selectedTile.row})</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

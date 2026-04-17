@@ -17,7 +17,6 @@ export default function App2() {
       setGameState(data);
       setError(null);
     } catch (err) {
-      // Game not started yet
       setError(err.message);
       setGameState(null);
     } finally {
@@ -43,9 +42,16 @@ export default function App2() {
   }, []);
 
   // convert API board data to array for GameBoard
-  const boardTiles = gameState ? Object.entries(gameState.board).map(([key, tile]) => {
+  const boardTiles = gameState
+    ? Object.entries(gameState.board).map(([key, tile]) => {
         const [col, row] = key.split(",").map(Number);
-        return {col,row,tileId: tile.tile_id,};
+        return {
+          col,
+          row,
+          tileId: tile.tile_id,
+          attribute: tile.attribute,
+          meeple_attached: tile.meeple_attached,
+        };
       })
     : [];
 
@@ -54,17 +60,27 @@ export default function App2() {
   const currentPlayer = gameState?.current_player || 0;
   const remaining = gameState?.remaining_pieces || 0;
 
+  // Pending tile from CV (via API)
+  const pendingTile = gameState?.pending_tile || null;
+  const validPlacements = gameState?.pending_valid || [];
+
   // entry screens for picking player numbers for api
   if (!loading && !gameState) {
     return (
       <div className="app">
         <header className="header">
-          <h1>Carcassonne<span> AR</span></h1>
+          <h1>
+            Carcassonne<span> AR</span>
+          </h1>
         </header>
         <div style={{ textAlign: "center", marginTop: 80 }}>
-          <h2 style={{ marginBottom: 16, color: "var(--text)" }}>No Game Running</h2>
+          <h2 style={{ marginBottom: 16, color: "var(--text)" }}>
+            No Game Running
+          </h2>
           <p style={{ color: "var(--dim)", marginBottom: 24 }}>
-            {error === "Game not started" ? "Start a new game to begin." : `API error: ${error}. Is the backend running?`}
+            {error === "Game not started"
+              ? "Start a new game to begin."
+              : `API error: ${error}. Is the backend running?`}
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             {[2, 3, 4, 5].map((n) => (
@@ -95,7 +111,9 @@ export default function App2() {
   if (loading) {
     return (
       <div className="app">
-        <p style={{ textAlign: "center", marginTop: 80, color: "var(--dim)" }}>
+        <p
+          style={{ textAlign: "center", marginTop: 80, color: "var(--dim)" }}
+        >
           Connecting to game engine...
         </p>
       </div>
@@ -108,7 +126,9 @@ export default function App2() {
       {/* Header */}
       <header className="header">
         <div>
-          <h1>Carcassonne<span> AR</span></h1>
+          <h1>
+            Carcassonne<span> AR</span>
+          </h1>
         </div>
         <div className="header-right">
           <div>
@@ -116,12 +136,22 @@ export default function App2() {
             <div className="header-stat-label">Turn</div>
           </div>
           <div>
-            <div>{boardTiles.length}/{boardTiles.length + remaining}</div>
+            <div>
+              {boardTiles.length}/{boardTiles.length + remaining}
+            </div>
             <div className="header-stat-label">Tiles</div>
           </div>
           <div>
             <span className="live-dot" />
-            <span style={{ color: "var(--green)", fontSize: 11, fontWeight: 600 }}>CV Live</span>
+            <span
+              style={{
+                color: "var(--green)",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              CV Live
+            </span>
           </div>
         </div>
       </header>
@@ -140,7 +170,9 @@ export default function App2() {
               {players.map((p, i) => (
                 <div
                   key={i}
-                  className={`player-row ${i === currentPlayer ? "active" : ""}`}
+                  className={`player-row ${
+                    i === currentPlayer ? "active" : ""
+                  }`}
                 >
                   <div
                     className="player-avatar"
@@ -149,7 +181,9 @@ export default function App2() {
                     {p.colour?.[0]?.toUpperCase() || i + 1}
                   </div>
                   <div>
-                    <div className="player-name">{p.colour || `Player ${i + 1}`}</div>
+                    <div className="player-name">
+                      {p.colour || `Player ${i + 1}`}
+                    </div>
                     <div className="player-detail">{p.meeples}/7 meeples</div>
                   </div>
                   <div
@@ -179,7 +213,12 @@ export default function App2() {
 
         {/* gameboard */}
         <div className="col">
-          <GameBoard tiles={boardTiles} />
+          <GameBoard
+            tiles={boardTiles}
+            meeples={[]}
+            validPlacements={validPlacements}
+            onTileClick={(tile) => console.log("Clicked:", tile)}
+          />
 
           <div className="metrics">
             <div className="metric">
@@ -201,17 +240,55 @@ export default function App2() {
           </div>
         </div>
 
-
         <div className="col">
           {/* Detected Tile */}
           <div className="card card-detect">
             <div className="card-header">
               <span>Detected Tile</span>
-              <span className="card-tag card-tag-green">CV OUTPUT</span>
+              <span
+                className={`card-tag ${
+                  pendingTile ? "card-tag-green" : ""
+                }`}
+              >
+                {pendingTile ? "DETECTED" : "WAITING"}
+              </span>
             </div>
             <div className="card-body" style={{ textAlign: "center" }}>
-              <div className="tile-preview">—</div>
-              <div className="tile-name">Waiting for CV...</div>
+              {pendingTile ? (
+                <>
+                  <div className="tile-preview">
+                    <img
+                      src={`/tiles/${pendingTile}.jpg`}
+                      alt={pendingTile}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        borderRadius: 4,
+                        objectFit: "cover",
+                      }}
+                      onError={(e) => {
+                        e.target.style.display = "none";
+                      }}
+                    />
+                  </div>
+                  <div className="tile-name">{pendingTile}</div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "var(--green)",
+                      marginTop: 4,
+                    }}
+                  >
+                    {validPlacements.length} valid placement
+                    {validPlacements.length !== 1 ? "s" : ""}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="tile-preview">—</div>
+                  <div className="tile-name">Waiting for CV...</div>
+                </>
+              )}
             </div>
           </div>
 
