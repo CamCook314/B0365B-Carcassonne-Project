@@ -96,6 +96,41 @@ def match_image(path: str, model, preprocess, embeddings, bias=None,
     return results
 
 
+def match_rotation(path: str, model, preprocess, embeddings, family_id: str,
+                   bias=None) -> str:
+    """Match a placed-tile crop against only the 4 rotations of the confirmed family.
+
+    Unlike match_image, this does NOT augment rotations — we want the model to be
+    rotation-sensitive so we can distinguish ID0/ID1/ID2/ID3 from each other.
+    The crop should already be deskewed to the board's axis before calling this.
+
+    Returns the specific tile ID string with the best rotation match, e.g. "ID9".
+    Falls back to family_id if no candidates are found in the embedding store.
+    """
+    base = (int(family_id.replace("ID", "")) // 4) * 4
+    candidates = {f"ID{base + r}" for r in range(4)}
+    ref_paths = [p for p in embeddings.keys() if p.stem in candidates]
+    if not ref_paths:
+        print(f"  match_rotation: no embeddings found for family {family_id} — using family ID")
+        return family_id
+
+    image = Image.open(path).convert("RGB")
+    tensor = preprocess(image).unsqueeze(0)
+    with torch.no_grad():
+        emb = model.encode_image(tensor).squeeze(0)
+    emb = F.normalize(emb, dim=0)
+    if bias is not None:
+        emb = F.normalize(emb + bias, dim=0)
+
+    R = torch.stack([embeddings[p] for p in ref_paths])
+    scores = emb @ R.T
+    ranked = sorted([(scores[i].item(), ref_paths[i].stem) for i in range(len(ref_paths))],
+                    reverse=True)
+    for score, rid in ranked:
+        print(f"  {score:.4f}  {rid}")
+    return ranked[0][1]
+
+
 if __name__ == "__main__":
     # Run from project root:  python cv/image_match.py
     # Regenerates cv/embeddings.pt from assets/tile_photos/edit/

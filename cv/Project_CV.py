@@ -26,6 +26,38 @@ cv_to_engine  = False        # Raised when CV has a placement ready for the engi
 game_response = (False, 1)   # (responded_bool, result_int); 1 = valid, 0 = invalid
 
 
+def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg, padding=1.02):
+    """Crop and deskew the placed tile at the confirmed grid slot.
+
+    slot_px is in processed-frame (1920×1080) coordinates.
+    Scales up to full-res, deskews by the board rotation angle, and returns a
+    tight square crop — ready for match_rotation() without augmentation.
+    """
+    cx = slot_px[0] / proc_scale
+    cy = slot_px[1] / proc_scale
+    ts = tile_size_px / proc_scale
+    side = int(ts * padding)
+
+    margin = int(side * 0.8)
+    x1_roi = max(int(cx) - side - margin, 0)
+    y1_roi = max(int(cy) - side - margin, 0)
+    x2_roi = min(int(cx) + side + margin, frame.shape[1])
+    y2_roi = min(int(cy) + side + margin, frame.shape[0])
+    roi = frame[y1_roi:y2_roi, x1_roi:x2_roi]
+
+    cx_roi = cx - x1_roi
+    cy_roi = cy - y1_roi
+    M = cv.getRotationMatrix2D((cx_roi, cy_roi), board_angle_deg, 1.0)
+    rotated = cv.warpAffine(roi, M, (roi.shape[1], roi.shape[0]),
+                            flags=cv.INTER_LINEAR)
+
+    x1 = max(int(cx_roi) - side // 2, 0)
+    y1 = max(int(cy_roi) - side // 2, 0)
+    x2 = min(int(cx_roi) + side // 2, rotated.shape[1])
+    y2 = min(int(cy_roi) + side // 2, rotated.shape[0])
+    return rotated[y1:y2, x1:x2]
+
+
 def extract_tile_crop(frame, contour, proc_scale, padding=1.02):
     """Return a rotation-corrected square crop of the tile from the full-res frame.
 
@@ -445,6 +477,29 @@ def cv_main_loop():
                                 grid_tracker.confirm_placement(best_slot, use_cx, use_cy)
                                 last_placed_coord = best_slot
                                 print(f"Tile placed at grid {best_slot} — ready for next tile.")
+
+                                # Post-placement rotation detection.
+                                # Crop the committed slot, deskew by the board angle, then
+                                # match against only the 4 rotation IDs of the confirmed
+                                # tile family.  The player may have rotated the tile after
+                                # identification, so we can't assume the pre-placement tile_id
+                                # has the right rotation.
+                                if tile_id is not None:
+                                    family_id    = tile_id
+                                    board_angle  = np.degrees(
+                                        np.arctan2(grid_tracker.b, grid_tracker.a))
+                                    placed_crop  = crop_placed_slot(
+                                        frame, slot_px, grid_tracker.tile_size_px,
+                                        proc_scale, board_angle)
+                                    placed_path  = os.path.join(
+                                        CROPS_DIR, f"placed_{save_count - 1:04d}.png")
+                                    cv.imwrite(placed_path, placed_crop)
+                                    print(f"Rotation detection for family {family_id}:")
+                                    tile_id = image_match.match_rotation(
+                                        placed_path, model, preprocess, embeddings,
+                                        family_id, bias=bias)
+                                    print(f"  → {tile_id}")
+
                                 grid_coord   = best_slot
                                 grid_checked = True
                             else:
