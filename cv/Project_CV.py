@@ -40,6 +40,11 @@ def extract_tile_crop(frame, contour, proc_scale, padding=1.02):
     cx  = cx / proc_scale;  cy  = cy / proc_scale
     rw  = rw / proc_scale;  rh  = rh / proc_scale
 
+    # Normalise angle: minAreaRect picks an arbitrary axis for square-ish rects.
+    # Ensure we always rotate by the long-side angle so crops are consistently oriented.
+    if rw < rh:
+        angle += 90
+
     side = int(max(rw, rh) * padding)
 
     # Extract a ROI large enough to contain the rotated tile
@@ -71,6 +76,7 @@ def cv_main_loop():
 
     model, preprocess = image_match.model_setup()
     embeddings        = image_match.load_embeddings()
+    bias              = image_match.load_bias()
 
     cap = cv.VideoCapture(0)
     cap.set(cv.CAP_PROP_FRAME_WIDTH,  3840)
@@ -103,7 +109,7 @@ def cv_main_loop():
     # --- Board growth / removal detection ---
     BOARD_GROWTH_THRESHOLD = 1000   # Min pixel area increase to count as growth
     SAT_GROWTH_THRESHOLD   = 500    # Min new saturation pixels inside board (catches centre tiles)
-    GROWTH_CONFIRM_FRAMES  = 3      # Consecutive frames of growth needed to commit
+    GROWTH_CONFIRM_FRAMES  = 5      # Consecutive frames of growth needed to commit
     REMOVAL_CONFIRM_FRAMES = 4      # Consecutive frames of shrinkage needed to confirm removal
 
     # --- Tile identification stability ---
@@ -134,9 +140,20 @@ def cv_main_loop():
 
     # Rollback state for the non-grid portions (board area, sat area, last coord).
     # Grid state rollback is handled by grid_tracker.snapshot() / restore().
-    rollback_prev_board_area = 0
-    rollback_prev_sat_area   = 0
-    rollback_last_coord      = None
+    rollback_prev_board_area    = 0
+    rollback_prev_sat_area      = 0
+    rollback_last_coord         = None
+    rollback_stable_board_mask  = None
+
+    # stable_board_mask: the committed board state — only updated on a confirmed
+    # tile placement (with a valid grid slot).  Used as the diff baseline so that
+    # arm/hand contamination (which inflates the live board_mask but never gets
+    # committed) never corrupts pre_growth_mask or prev_board_area.
+    stable_board_mask = None
+
+    # Count consecutive non-growth frames; require 2 in a row before resetting
+    # the growth counter, so one flickering frame doesn't undo 2+ growth frames.
+    non_growth_count = 0
 
     global tile_checked, tile_id, grid_checked, grid_coord, cv_to_engine, game_response
 
@@ -177,13 +194,26 @@ def cv_main_loop():
                 first = max(valid, key=cv.contourArea)
                 board_mask      = np.zeros(blobs.shape, dtype=np.uint8)
                 cv.drawContours(board_mask, [first], -1, 255, -1)
-                prev_board_area = cv.contourArea(first)
-                prev_sat_area   = cv.countNonZero(cv.bitwise_and(sat_blobs, board_mask))
-                set_board       = False
+                prev_board_area   = cv.contourArea(first)
+                prev_sat_area     = cv.countNonZero(cv.bitwise_and(sat_blobs, board_mask))
+                stable_board_mask = board_mask.copy()   # Committed baseline for diff
+                set_board         = False
 
                 origin       = mask_centroid(board_mask)
                 grid_tracker = GridTracker(origin)
-                print(f"Board origin set at pixel ({origin[0]:.0f}, {origin[1]:.0f}) — identifying first tile.")
+
+                # Seed tile size from the origin blob's minAreaRect dimensions.
+                # This is more reliable than using the diff centroid on the second
+                # tile: MORPH_CLOSE fills the gap between adjacent tiles, pulling
+                # the diff centroid ~25% further than the actual tile centre and
+                # making calibrate() overestimate a.  A single solid tile blob is
+                # not significantly expanded by MORPH_CLOSE.
+                rect_f          = cv.minAreaRect(first)
+                (_, _), (rw_f, rh_f), _ = rect_f
+                grid_tracker.a  = float(max(rw_f, rh_f))
+                grid_tracker.b  = 0.0
+                print(f"Board origin set at pixel ({origin[0]:.0f}, {origin[1]:.0f})"
+                      f"  tile_size={grid_tracker.a:.0f}px  — identifying first tile.")
 
                 # Identify the origin tile immediately so the engine knows what (0, 0) is.
                 crop = extract_tile_crop(frame, first, proc_scale)
@@ -192,7 +222,7 @@ def cv_main_loop():
                 print(f"Saved origin tile: {path}")
                 save_count += 1
 
-                results      = image_match.match_image(path, model, preprocess, embeddings)
+                results      = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
                 tile_id      = results[0][1]   # bare ID string, e.g. "ID43"
                 tile_checked = True
                 grid_coord   = (0, 0)
@@ -205,6 +235,15 @@ def cv_main_loop():
         else:
             old_board_mask            = board_mask.copy()
             new_board_cnt, unplaced   = classify_contours(valid, board_mask, blobs.shape)
+
+            # Drop any "unplaced" blobs larger than 3× the expected tile area.
+            # Hands and arms produce large blobs that classify_contours correctly
+            # excludes from the board, but they would otherwise be mistaken for
+            # tiles in the IDENTIFY phase.
+            if grid_tracker is not None and grid_tracker.tile_size_px is not None:
+                max_unplaced_area = (grid_tracker.tile_size_px ** 2) * 3
+                unplaced = [c for c in unplaced
+                            if cv.contourArea(c) < max_unplaced_area]
 
             if new_board_cnt is not None:
                 rect = cv.minAreaRect(new_board_cnt)
@@ -253,7 +292,7 @@ def cv_main_loop():
                         candidate_tile_cnt    = None
                         candidate_tile_center = None
                         phase                 = WAIT_PLACEMENT
-                        results      = image_match.match_image(path, model, preprocess, embeddings)
+                        results      = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
                         tile_id      = results[0][1]
                         tile_checked = True
                         print("Tile identified — waiting for it to be placed on the board.")
@@ -272,8 +311,12 @@ def cv_main_loop():
                     sat_growth         = sat_in_board - prev_sat_area > SAT_GROWTH_THRESHOLD
 
                     if contour_growth or sat_growth:
+                        non_growth_count = 0   # Reset grace-period counter on any growth
                         if growth_frame_count == 0:
-                            pre_growth_mask = old_board_mask
+                            # Always diff against the last COMMITTED board state, not the
+                            # live board_mask which may already include arm contamination.
+                            pre_growth_mask = stable_board_mask.copy() \
+                                if stable_board_mask is not None else old_board_mask
 
                         growth_frame_count  += 1
                         candidate_board_cnt  = new_board_cnt
@@ -287,60 +330,142 @@ def cv_main_loop():
                             diff_mask = cv.subtract(new_mask, pre_growth_mask) \
                                         if pre_growth_mask is not None else new_mask
 
-                            # Diff centroid — used for tile_size calibration,
-                            # slot detection, and grid refit data.
+                            # Diff centroid — diagnostic only.  Slot detection uses
+                            # sat_in_diff coverage (immune to MORPH_CLOSE halo bias).
                             diff_M  = cv.moments(diff_mask)
                             diff_cx = diff_M['m10'] / diff_M['m00'] if diff_M['m00'] > 200 else None
                             diff_cy = diff_M['m01'] / diff_M['m00'] if diff_M['m00'] > 200 else None
 
                             if diff_cx is not None:
-                                grid_tracker.calibrate(diff_cx, diff_cy)
                                 print(f"  diff centroid px=({diff_cx:.0f},{diff_cy:.0f})  "
-                                      f"origin=({grid_tracker.origin_px[0]:.0f},{grid_tracker.origin_px[1]:.0f})")
+                                      f"origin=({grid_tracker.origin_px[0]:.0f},"
+                                      f"{grid_tracker.origin_px[1]:.0f})")
 
-                            # Primary: find the open slot closest to the diff centroid.
-                            # More robust than pixel-counting in sat_in_diff because
-                            # MORPH_CLOSE inflates the board blob, spreading the diff
-                            # region far beyond the actual new tile.
-                            best_slot = grid_tracker.closest_slot(diff_cx, diff_cy)
+                            # Primary slot detection: saturation-filtered coverage per slot.
+                            # sat_in_diff = sat_blobs & diff_mask — keeps only real tile pixels.
+                            # MORPH_CLOSE halos are empty table surface (zero saturation) so they
+                            # score exactly 0, eliminating halo contamination entirely.
+                            sat_in_diff = cv.bitwise_and(sat_blobs, diff_mask)
+                            best_slot, top_cov = grid_tracker.best_coverage_slot(sat_in_diff)
+                            used_sat = True
+                            if top_cov < 200:
+                                best_slot = None
 
-                            # Fallback: if exactly one slot has all 4 neighbours placed,
-                            # it must be the centre tile (diff mask is empty in that case).
+                            # Fallback A: muted-colour tile — use raw diff coverage.
+                            # MORPH_CLOSE halos contaminate this, but the actual tile area
+                            # still dominates (~3-4× more coverage than any adjacent halo).
+                            if best_slot is None:
+                                best_slot, top_cov = grid_tracker.best_coverage_slot(diff_mask)
+                                used_sat = False
+                                if top_cov < 200:
+                                    best_slot = None
+
+                            # Fallback B: enclosed centre tile — diff is near-empty because
+                            # MORPH_CLOSE already filled the ring gap before placement.
                             if best_slot is None:
                                 enclosed = grid_tracker.enclosed_slots()
                                 if len(enclosed) == 1:
                                     best_slot = enclosed[0]
+                                    top_cov   = 0
+                                    print(f"  Grid: enclosed slot fallback → {best_slot}")
 
-                            # Save rollback snapshot before committing.
-                            grid_tracker.snapshot()
-                            rollback_prev_board_area = prev_board_area
-                            rollback_prev_sat_area   = prev_sat_area
-                            rollback_last_coord      = last_placed_coord
+                            # Coverage margin check — warn if two slots score similarly.
+                            if best_slot is not None and top_cov > 0:
+                                cov_mask = sat_in_diff if used_sat else diff_mask
+                                second_cov = max(
+                                    (grid_tracker.cell_coverage(cov_mask, *s)
+                                     for s in grid_tracker.open_slots() if s != best_slot),
+                                    default=0
+                                )
+                                margin = (top_cov - second_cov) / max(top_cov, 1)
+                                label  = "sat" if used_sat else "diff"
+                                if margin < 0.2:
+                                    print(f"  WARNING: coverage ambiguous ({top_cov} vs "
+                                          f"{second_cov} {label}-px, {margin:.0%} margin)"
+                                          f" — press 'n' if grid looks wrong")
+                                else:
+                                    print(f"  Grid: best slot → {best_slot} "
+                                          f"({top_cov} {label}-px, {margin:.0%} margin)")
 
-                            # Commit board update.
-                            board_mask          = new_mask
-                            prev_board_area     = cv.contourArea(candidate_board_cnt)
-                            prev_sat_area       = cv.countNonZero(cv.bitwise_and(sat_blobs, board_mask))
-                            tile_saved          = False
-                            phase               = IDENTIFY
+                            # Diagnostic cross-check: log if diff centroid disagrees.
+                            if best_slot is not None and diff_cx is not None:
+                                centroid_slot = grid_tracker.closest_slot(diff_cx, diff_cy)
+                                if centroid_slot is not None and centroid_slot != best_slot:
+                                    print(f"  NOTE: diff centroid suggests {centroid_slot}, "
+                                          f"coverage chose {best_slot}")
+
+                            # Always reset growth counters regardless of outcome.
                             growth_frame_count  = 0
+                            non_growth_count    = 0
                             candidate_board_cnt = None
                             pre_growth_mask     = None
 
                             if best_slot is not None:
-                                grid_tracker.confirm_placement(best_slot, diff_cx, diff_cy)
+                                # Save rollback snapshot before committing.
+                                grid_tracker.snapshot()
+                                rollback_prev_board_area   = prev_board_area
+                                rollback_prev_sat_area     = prev_sat_area
+                                rollback_last_coord        = last_placed_coord
+                                rollback_stable_board_mask = stable_board_mask.copy() \
+                                    if stable_board_mask is not None else None
+
+                                # Build a clean committed mask: previous stable state
+                                # plus just the confirmed slot's bounding box.
+                                # This avoids baking arm/hand pixels into the baseline.
+                                slot_px = grid_tracker.grid_to_px(*best_slot)
+                                ts      = int(grid_tracker.tile_size_px)
+                                sm      = stable_board_mask.copy() \
+                                          if stable_board_mask is not None \
+                                          else np.zeros(blobs.shape, dtype=np.uint8)
+                                x1s = max(0,              slot_px[0] - ts // 2)
+                                y1s = max(0,              slot_px[1] - ts // 2)
+                                x2s = min(blobs.shape[1], slot_px[0] + ts // 2)
+                                y2s = min(blobs.shape[0], slot_px[1] + ts // 2)
+                                sm[y1s:y2s, x1s:x2s] = 255
+                                stable_board_mask = sm
+
+                                # board_mask (already set from new_board_cnt on line 244)
+                                # reflects the live state — keep it but base the growth
+                                # baseline on the clean stable mask so arm pixels don't
+                                # inflate prev_board_area.
+                                prev_board_area = cv.countNonZero(stable_board_mask)
+                                prev_sat_area   = cv.countNonZero(
+                                    cv.bitwise_and(sat_blobs, stable_board_mask))
+                                tile_saved = False
+                                phase      = IDENTIFY
+
+                                # Use slot_centroid with sat_in_diff for the refit data point:
+                                # saturation pixels are centred on the actual tile, not biased
+                                # by MORPH_CLOSE halos.  Fall back to diff_mask if too sparse.
+                                sc_x, sc_y = grid_tracker.slot_centroid(sat_in_diff, *best_slot)
+                                if sc_x is None:
+                                    sc_x, sc_y = grid_tracker.slot_centroid(diff_mask, *best_slot)
+                                use_cx = sc_x if sc_x is not None else diff_cx
+                                use_cy = sc_y if sc_y is not None else diff_cy
+                                grid_tracker.confirm_placement(best_slot, use_cx, use_cy)
                                 last_placed_coord = best_slot
                                 print(f"Tile placed at grid {best_slot} — ready for next tile.")
                                 grid_coord   = best_slot
                                 grid_checked = True
                             else:
-                                print("Board updated — could not determine grid position.")
+                                # Could not map growth to a grid slot — arm or hand likely.
+                                # Do NOT update prev_board_area or stable_board_mask:
+                                # keeping the old baseline means growth will re-trigger
+                                # correctly once the arm leaves and the tile is visible.
+                                print("Growth confirmed but no grid slot found "
+                                      "(arm/hand likely) — will retry.")
                     else:
                         if growth_frame_count > 0:
-                            growth_frame_count = 0
-                            candidate_board_cnt = None
-                            pre_growth_mask     = None
-                            print("Growth was transient — ignored.")
+                            non_growth_count += 1
+                            if non_growth_count >= 2:
+                                # Two consecutive non-growth frames: genuine transient.
+                                growth_frame_count  = 0
+                                non_growth_count    = 0
+                                candidate_board_cnt = None
+                                pre_growth_mask     = None
+                                print("Growth was transient — ignored.")
+                            # One non-growth frame: keep the counter (tile may be wobbling
+                            # at the threshold) and wait for the next frame.
 
             # ── Phase 3: invalid placement — wait for tile removal ────────────
             elif phase == INVALID_DISPLAY:
@@ -399,9 +524,10 @@ def cv_main_loop():
                 print("Finished communicating — placement accepted.")
             else:
                 grid_tracker.restore()
-                prev_board_area   = rollback_prev_board_area
-                prev_sat_area     = rollback_prev_sat_area
-                last_placed_coord = rollback_last_coord
+                prev_board_area     = rollback_prev_board_area
+                prev_sat_area       = rollback_prev_sat_area
+                last_placed_coord   = rollback_last_coord
+                stable_board_mask   = rollback_stable_board_mask
                 tile_saved        = True   # Tile identity already known — skip re-scan
                 phase             = INVALID_DISPLAY
                 removal_frame_count = 0

@@ -17,7 +17,7 @@ DENSITY_THRESHOLD  = 8    # Background grain stays below this
 MORPH_OPEN_KERNEL  = 7    # Removes isolated noise blobs smaller than this
 MORPH_CLOSE_KERNEL = 45   # Fills intra-tile gaps; must stay < tile_size/2
                            # (~40px for 80-90px tiles at 1080p processing res)
-SAT_THRESHOLD      = 50   # Min HSV saturation (0–255) to count as tile colour
+SAT_THRESHOLD      = 80   # Min HSV saturation (0–255) to count as tile colour
 TILE_AREA_MIN      = 3000
 TILE_AREA_MAX      = 100_000_000
 

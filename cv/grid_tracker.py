@@ -89,14 +89,36 @@ class GridTracker:
             return 0
         return cv.countNonZero(blob_mask[y1:y2, x1:x2])
 
+    def best_coverage_slot(self, diff_mask):
+        """Return (slot, coverage) for the open slot with the highest diff-pixel coverage.
+
+        Scores every open slot by how many diff pixels fall within its expected
+        bounding box.  More robust than centroid detection: a displacement of up
+        to ±half-tile still picks the correct slot, and per-slot counting is not
+        skewed by MORPH_CLOSE halos elsewhere in the diff.
+
+        Call with sat_in_diff (= cv.bitwise_and(sat_blobs, diff_mask)) rather
+        than raw diff_mask: MORPH_CLOSE halos are empty table with zero saturation,
+        so they score exactly 0, while real tile pixels score high.
+
+        Returns (None, 0) if no open slots are found or all have zero coverage.
+        """
+        if self.a is None:
+            return None, 0
+        best_slot, best_cov = None, 0
+        for slot in self.open_slots():
+            cov = self.cell_coverage(diff_mask, *slot)
+            if cov > best_cov:
+                best_cov, best_slot = cov, slot
+        return best_slot, best_cov
+
     def closest_slot(self, diff_cx, diff_cy):
         """Return the open slot whose predicted pixel centre is closest to the
         diff centroid, or None if no slot is within one tile-width.
 
-        Using the diff centroid directly is more robust than pixel-counting
-        in sat_in_diff: MORPH_CLOSE inflates the board blob so the diff region
-        spreads well beyond the actual new tile, causing pixel counts to be
-        unreliable.  The centroid of the raw diff mask sits on the new tile.
+        Used as a diagnostic cross-check against best_coverage_slot.  The raw
+        diff centroid is biased outward by MORPH_CLOSE halos and is unreliable
+        when a hand is in frame, so it should NOT be the primary detection method.
         """
         if self.a is None or diff_cx is None or diff_cy is None:
             return None
