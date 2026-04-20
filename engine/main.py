@@ -69,7 +69,7 @@ def gameStart():
     while game.remaining_pieces > 0:
         playTurn(game, tileBag)
 
-    scoreEndGame(game)
+    #scoreEndGame(game)
 
     # LEGACY CODE BELOW
 
@@ -219,7 +219,7 @@ def playTurn(game, tileBag):
     printBoard(game)
 
 
-
+"""
 def scoreEndGame(game):
     for struct in game.structures:
         temp_score = 0
@@ -247,7 +247,7 @@ def scoreEndGame(game):
                     temp_score += 1
             for players in struct.players: # should only be one player tho
                 players.score += temp_score
-
+"""
 
 
 # Test Game
