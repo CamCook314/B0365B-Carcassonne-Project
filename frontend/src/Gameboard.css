@@ -1,0 +1,135 @@
+/* Board container */
+.board-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 600px;
+  background: var(--bg);
+}
+
+/* Tiles */
+.tile {
+  position: absolute;
+  width: 46px; height: 46px;
+  background: var(--card-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.tile:hover {
+  border-color: var(--accent);
+  transform: scale(1.08);
+  z-index: 10;
+}
+
+.tile-selected {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent);
+  z-index: 10;
+}
+
+/* Meeple dots */
+.meeple {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--bg);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.meeple-top    { top: 2px;    left: 50%;  transform: translateX(-50%); }
+.meeple-bottom { bottom: 2px; left: 50%;  transform: translateX(-50%); }
+.meeple-left   { left: 2px;   top: 50%;   transform: translateY(-50%); }
+.meeple-right  { right: 2px;  top: 50%;   transform: translateY(-50%); }
+.meeple-center { top: 50%;    left: 50%;  transform: translate(-50%, -50%); }
+
+/* Zoom controls */
+.board-controls {
+  position: absolute;
+  top: 8px; right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 20;
+}
+
+.board-btn {
+  width: 28px; height: 28px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.board-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+.board-info {
+  position: absolute;
+  bottom: 8px; left: 8px;
+  font-family: monospace;
+  font-size: 10px;
+  color: var(--dim);
+  background: var(--card);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  z-index: 20;
+}
+
+/* Tile info popup */
+.tile-popup {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  z-index: 30;
+  min-width: 150px;
+  overflow: hidden;
+}
+
+.tile-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  font-family: monospace;
+  border-bottom: 1px solid var(--border);
+}
+
+.tile-popup-close {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+}
+
+.tile-popup-close:hover { color: var(--text); }
+
+.tile-popup-body {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.tile-popup-body div { margin-bottom: 3px; }
+.tile-popup-body strong { color: var(--dim); font-weight: 500; margin-right: 4px; }
