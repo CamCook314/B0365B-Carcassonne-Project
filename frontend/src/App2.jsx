@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getGameState, startGame } from "./api";
+import { getGameState, startGame, setPendingTile } from "./api";
 import GameBoard from "./Gameboard";
 import "./App2.css";
 
@@ -9,6 +9,11 @@ export default function App2() {
   const [gameState, setGameState] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pendingInput, setPendingInput] = useState(0);
+
+  // Pending tile from CV (via API)
+  const pendingTile = gameState?.pending_tile || null;
+  const validPlacements = gameState?.pending_valid || [];
 
   // Fetch game state from API
   const fetchState = async () => {
@@ -21,6 +26,15 @@ export default function App2() {
       setGameState(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSetPending = async () => {
+    try {
+      await setPendingTile(Number(pendingInput));
+      await fetchState();
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -41,6 +55,13 @@ export default function App2() {
     return () => clearInterval(interval);
   }, []);
 
+  // check if the tile has changed
+  useEffect(() => {
+    if (pendingTile != null) {
+      console.log("Pending tile changed:", pendingTile);
+    }
+  }, [pendingTile]);
+
   // convert API board data to array for GameBoard
   const boardTiles = gameState
     ? Object.entries(gameState.board).map(([key, tile]) => {
@@ -59,10 +80,6 @@ export default function App2() {
   const currentTurn = gameState?.current_turn || 0;
   const currentPlayer = gameState?.current_player || 0;
   const remaining = gameState?.remaining_pieces || 0;
-
-  // Pending tile from CV (via API)
-  const pendingTile = gameState?.pending_tile || null;
-  const validPlacements = gameState?.pending_valid || [];
 
   // entry screens for picking player numbers for api
   if (!loading && !gameState) {
@@ -281,6 +298,28 @@ export default function App2() {
                   >
                     {validPlacements.length} valid placement
                     {validPlacements.length !== 1 ? "s" : ""}
+                  </div>
+                  <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "center" }}>
+                    <input
+                      type="number"
+                      min="0"
+                      value={pendingInput}
+                      onChange={(e) => setPendingInput(e.target.value)}
+                      style={{ width: 80, padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
+                    />
+                    <button
+                      onClick={() => setPendingTile(Number(pendingInput))}
+                      style={{
+                        padding: "8px 14px",
+                        background: "var(--accent)",
+                        color: "var(--bg)",
+                        border: "none",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Set Pending
+                    </button>
                   </div>
                 </>
               ) : (
