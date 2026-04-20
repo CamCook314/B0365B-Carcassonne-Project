@@ -69,9 +69,6 @@ def start_game():
     game_state = initialiseBoard(num_players)
     tile_bag_instance = tile_bag.tile_bag()
 
-    for tile_id, _, _ in STARTING_RIVER:
-        tile_bag_instance.remove_tile(tile_id)
-
     pending_tile = None
     pending_valid = []
 

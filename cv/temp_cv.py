@@ -388,11 +388,11 @@ def cv_main_loop():
                 print("Placement accepted.")
             else:
                 grid_tracker.restore()
-                prev_board_area   = rollback_prev_board_area
-                prev_sat_area     = rollback_prev_sat_area
+                prev_board_area = rollback_prev_board_area
+                prev_sat_area = rollback_prev_sat_area
                 last_placed_coord = rollback_last_coord
-                tile_saved        = True
-                phase             = INVALID_DISPLAY
+                tile_saved = True
+                phase = INVALID_DISPLAY
                 removal_frame_count = 0
                 print("Placement rejected. Remove tile and reposition.")
 
