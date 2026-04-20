@@ -26,15 +26,19 @@ cv_to_engine  = False        # Raised when CV has a placement ready for the engi
 game_response = (False, 1)   # (responded_bool, result_int); 1 = valid, 0 = invalid
 
 
-def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg, padding=1.02):
+def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
+                     center_px=None, padding=0.85):
     """Crop and deskew the placed tile at the confirmed grid slot.
 
-    slot_px is in processed-frame (1920×1080) coordinates.
-    Scales up to full-res, deskews by the board rotation angle, and returns a
-    tight square crop — ready for match_rotation() without augmentation.
+    slot_px and center_px are in processed-frame (1920×1080) coordinates.
+    center_px is the observed saturation centroid; falls back to slot_px (grid
+    prediction) when not available.  Scales up to full-res, deskews by the
+    board rotation angle, and returns a tight square crop for match_rotation().
+    padding < 1.0 intentionally clips tile edges to exclude table and adjacent tiles.
     """
-    cx = slot_px[0] / proc_scale
-    cy = slot_px[1] / proc_scale
+    src = center_px if center_px is not None else slot_px
+    cx = src[0] / proc_scale
+    cy = src[1] / proc_scale
     ts = tile_size_px / proc_scale
     side = int(ts * padding)
 
@@ -58,7 +62,7 @@ def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg, 
     return rotated[y1:y2, x1:x2]
 
 
-def extract_tile_crop(frame, contour, proc_scale, padding=1.02):
+def extract_tile_crop(frame, contour, proc_scale, padding=0.85):
     """Return a rotation-corrected square crop of the tile from the full-res frame.
 
     Uses minAreaRect to find the tile's true rotation, rotates a ROI around the
@@ -466,9 +470,9 @@ def cv_main_loop():
                                 tile_saved = False
                                 phase      = IDENTIFY
 
-                                # Use slot_centroid with sat_in_diff for the refit data point:
-                                # saturation pixels are centred on the actual tile, not biased
-                                # by MORPH_CLOSE halos.  Fall back to diff_mask if too sparse.
+                                # Compute the actual observed tile centroid from saturation
+                                # pixels — more accurate than the grid-predicted slot centre,
+                                # and used both for the refit and as the placed-crop centre.
                                 sc_x, sc_y = grid_tracker.slot_centroid(sat_in_diff, *best_slot)
                                 if sc_x is None:
                                     sc_x, sc_y = grid_tracker.slot_centroid(diff_mask, *best_slot)
@@ -479,18 +483,16 @@ def cv_main_loop():
                                 print(f"Tile placed at grid {best_slot} — ready for next tile.")
 
                                 # Post-placement rotation detection.
-                                # Crop the committed slot, deskew by the board angle, then
-                                # match against only the 4 rotation IDs of the confirmed
-                                # tile family.  The player may have rotated the tile after
-                                # identification, so we can't assume the pre-placement tile_id
-                                # has the right rotation.
+                                # Crop using the observed centroid (not the grid prediction) so
+                                # the tile is well-centred even when the grid fit isn't perfect.
                                 if tile_id is not None:
                                     family_id    = tile_id
                                     board_angle  = np.degrees(
                                         np.arctan2(grid_tracker.b, grid_tracker.a))
                                     placed_crop  = crop_placed_slot(
                                         frame, slot_px, grid_tracker.tile_size_px,
-                                        proc_scale, board_angle)
+                                        proc_scale, board_angle,
+                                        center_px=(use_cx, use_cy))
                                     placed_path  = os.path.join(
                                         CROPS_DIR, f"placed_{save_count - 1:04d}.png")
                                     cv.imwrite(placed_path, placed_crop)
