@@ -16,12 +16,12 @@ asset_pth = base_pth / "assets" / "tile_photos"
 # Get screens info, projector in extend mode is classed as extra screen
 monitors = screeninfo.get_monitors()
 # Check to make sure monitor is connected
-if len(monitors) > 1:
+if len(monitors) == 1:
     print("Projector not connected in extended mode")
     exit()
 
 # Get project screen settings
-projector = monitors[0]
+projector = monitors[1]
 
 # Define projector resolution
 proj_w, proj_h = projector.width, projector.height
