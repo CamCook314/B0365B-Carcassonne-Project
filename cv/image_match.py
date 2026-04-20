@@ -61,15 +61,13 @@ def load_bias() -> torch.Tensor | None:
 ## score images, return list of ranked results
 # model and preprocess from model_setup()
 # bias: optional tensor from load_bias(); shifts query embedding to match reference distribution
-# augment_rotations: try all 4 x 90-degree rotations of the query and take max score per
-#   reference — eliminates crop-orientation ambiguity for square tiles.  Since the reference
-#   embeddings already cover 4 rotations per tile family (ID0–ID3), the max-per-reference
-#   approach finds whichever reference ID best aligns with the query orientation, giving
-#   correct family identification even when the query crop is at the "wrong" 90° step.
-def match_image(path: str, model, preprocess, embeddings, bias=None,
-                augment_rotations=True) -> list[tuple[float, str]]:
+# Returns families ranked by the sum of their 4 rotation scores — more robust than ranking
+# individual references because a genuine match scores consistently across all 4 rotations,
+# while a false positive typically has one lucky high score and three low ones.
+# Each result is (family_sum_score, best_rotation_id_within_family).
+def match_image(path: str, model, preprocess, embeddings, bias=None) -> list[tuple[float, str]]:
     image = Image.open(path).convert("RGB")
-    angles = [0, 90, 180, 270] if augment_rotations else [0]
+    angles = [0, 90, 180, 270]
 
     query_embs = []
     for angle in angles:
@@ -82,18 +80,65 @@ def match_image(path: str, model, preprocess, embeddings, bias=None,
             emb = F.normalize(emb + bias, dim=0)
         query_embs.append(emb)
 
-    # Q: (R, D) where R = number of rotations (4), D = embedding dim
+    # Q: (4, D) — one row per query rotation.
+    # scores[r, i] = dot(Q[r], ref[i]) → max over r gives best-aligned query per reference.
     Q = torch.stack(query_embs)
-
-    # Batch-score all references at once.
-    # scores[r, i] = dot(Q[r], ref[i])  →  max over r gives best-aligned rotation per ref.
     ref_paths = list(embeddings.keys())
     R = torch.stack([embeddings[p] for p in ref_paths])   # (N, D)
-    scores = (Q @ R.T).max(dim=0).values                  # (N,)
+    per_ref = (Q @ R.T).max(dim=0).values                 # (N,) rotation-invariant per ref
 
-    results = [(scores[i].item(), ref_paths[i].stem) for i in range(len(ref_paths))]
+    # Aggregate: sum all 4 rotation scores within each family.
+    # A genuine match has all 4 references scoring well; a false positive has one high
+    # outlier and three low scores, so its family sum loses to the true family.
+    family_sum  = {}   # family_base → cumulative score
+    family_best = {}   # family_base → (best_individual_score, rid)
+    for i, p in enumerate(ref_paths):
+        rid  = p.stem
+        base = (int(rid.replace("ID", "")) // 4) * 4
+        s    = per_ref[i].item()
+        family_sum[base]  = family_sum.get(base, 0.0) + s
+        if base not in family_best or s > family_best[base][0]:
+            family_best[base] = (s, rid)
+
+    results = [(family_sum[base], family_best[base][1])
+               for base in family_sum]
     results.sort(reverse=True)
     return results
+
+
+def match_rotation(path: str, model, preprocess, embeddings, family_id: str,
+                   bias=None) -> str:
+    """Match a placed-tile crop against only the 4 rotations of the confirmed family.
+
+    Unlike match_image, this does NOT augment rotations — we want the model to be
+    rotation-sensitive so we can distinguish ID0/ID1/ID2/ID3 from each other.
+    The crop should already be deskewed to the board's axis before calling this.
+
+    Returns the specific tile ID string with the best rotation match, e.g. "ID9".
+    Falls back to family_id if no candidates are found in the embedding store.
+    """
+    base = (int(family_id.replace("ID", "")) // 4) * 4
+    candidates = {f"ID{base + r}" for r in range(4)}
+    ref_paths = [p for p in embeddings.keys() if p.stem in candidates]
+    if not ref_paths:
+        print(f"  match_rotation: no embeddings found for family {family_id} — using family ID")
+        return family_id
+
+    image = Image.open(path).convert("RGB")
+    tensor = preprocess(image).unsqueeze(0)
+    with torch.no_grad():
+        emb = model.encode_image(tensor).squeeze(0)
+    emb = F.normalize(emb, dim=0)
+    if bias is not None:
+        emb = F.normalize(emb + bias, dim=0)
+
+    R = torch.stack([embeddings[p] for p in ref_paths])
+    scores = emb @ R.T
+    ranked = sorted([(scores[i].item(), ref_paths[i].stem) for i in range(len(ref_paths))],
+                    reverse=True)
+    for score, rid in ranked:
+        print(f"  {score:.4f}  {rid}")
+    return ranked[0][1]
 
 
 if __name__ == "__main__":

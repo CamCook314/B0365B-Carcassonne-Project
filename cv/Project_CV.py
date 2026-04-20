@@ -26,7 +26,43 @@ cv_to_engine  = False        # Raised when CV has a placement ready for the engi
 game_response = (False, 1)   # (responded_bool, result_int); 1 = valid, 0 = invalid
 
 
-def extract_tile_crop(frame, contour, proc_scale, padding=1.02):
+def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
+                     center_px=None, padding=0.85):
+    """Crop and deskew the placed tile at the confirmed grid slot.
+
+    slot_px and center_px are in processed-frame (1920×1080) coordinates.
+    center_px is the observed saturation centroid; falls back to slot_px (grid
+    prediction) when not available.  Scales up to full-res, deskews by the
+    board rotation angle, and returns a tight square crop for match_rotation().
+    padding < 1.0 intentionally clips tile edges to exclude table and adjacent tiles.
+    """
+    src = center_px if center_px is not None else slot_px
+    cx = src[0] / proc_scale
+    cy = src[1] / proc_scale
+    ts = tile_size_px / proc_scale
+    side = int(ts * padding)
+
+    margin = int(side * 0.8)
+    x1_roi = max(int(cx) - side - margin, 0)
+    y1_roi = max(int(cy) - side - margin, 0)
+    x2_roi = min(int(cx) + side + margin, frame.shape[1])
+    y2_roi = min(int(cy) + side + margin, frame.shape[0])
+    roi = frame[y1_roi:y2_roi, x1_roi:x2_roi]
+
+    cx_roi = cx - x1_roi
+    cy_roi = cy - y1_roi
+    M = cv.getRotationMatrix2D((cx_roi, cy_roi), board_angle_deg, 1.0)
+    rotated = cv.warpAffine(roi, M, (roi.shape[1], roi.shape[0]),
+                            flags=cv.INTER_LINEAR)
+
+    x1 = max(int(cx_roi) - side // 2, 0)
+    y1 = max(int(cy_roi) - side // 2, 0)
+    x2 = min(int(cx_roi) + side // 2, rotated.shape[1])
+    y2 = min(int(cy_roi) + side // 2, rotated.shape[0])
+    return rotated[y1:y2, x1:x2]
+
+
+def extract_tile_crop(frame, contour, proc_scale, padding=0.85):
     """Return a rotation-corrected square crop of the tile from the full-res frame.
 
     Uses minAreaRect to find the tile's true rotation, rotates a ROI around the
@@ -434,9 +470,9 @@ def cv_main_loop():
                                 tile_saved = False
                                 phase      = IDENTIFY
 
-                                # Use slot_centroid with sat_in_diff for the refit data point:
-                                # saturation pixels are centred on the actual tile, not biased
-                                # by MORPH_CLOSE halos.  Fall back to diff_mask if too sparse.
+                                # Compute the actual observed tile centroid from saturation
+                                # pixels — more accurate than the grid-predicted slot centre,
+                                # and used both for the refit and as the placed-crop centre.
                                 sc_x, sc_y = grid_tracker.slot_centroid(sat_in_diff, *best_slot)
                                 if sc_x is None:
                                     sc_x, sc_y = grid_tracker.slot_centroid(diff_mask, *best_slot)
@@ -445,6 +481,27 @@ def cv_main_loop():
                                 grid_tracker.confirm_placement(best_slot, use_cx, use_cy)
                                 last_placed_coord = best_slot
                                 print(f"Tile placed at grid {best_slot} — ready for next tile.")
+
+                                # Post-placement rotation detection.
+                                # Crop using the observed centroid (not the grid prediction) so
+                                # the tile is well-centred even when the grid fit isn't perfect.
+                                if tile_id is not None:
+                                    family_id    = tile_id
+                                    board_angle  = np.degrees(
+                                        np.arctan2(grid_tracker.b, grid_tracker.a))
+                                    placed_crop  = crop_placed_slot(
+                                        frame, slot_px, grid_tracker.tile_size_px,
+                                        proc_scale, board_angle,
+                                        center_px=(use_cx, use_cy))
+                                    placed_path  = os.path.join(
+                                        CROPS_DIR, f"placed_{save_count - 1:04d}.png")
+                                    cv.imwrite(placed_path, placed_crop)
+                                    print(f"Rotation detection for family {family_id}:")
+                                    tile_id = image_match.match_rotation(
+                                        placed_path, model, preprocess, embeddings,
+                                        family_id, bias=bias)
+                                    print(f"  → {tile_id}")
+
                                 grid_coord   = best_slot
                                 grid_checked = True
                             else:

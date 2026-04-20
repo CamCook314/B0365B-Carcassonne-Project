@@ -130,19 +130,27 @@ def place_tile():
     if x is None or y is None:
         return jsonify({"error": "Missing x or y"}), 400
 
-    # Find which rotation fits this position from pending list
-    tile_id = None
-    for px, py, rid in pending_valid:
-        if px == x and py == y:
-            tile_id = rid
-            break
+    # CV may supply the exact rotation it detected post-placement; otherwise
+    # fall back to the first valid rotation for this position.
+    rotation_id = data.get("rotation_id")
+    placed_tile_id = None
+    if rotation_id is not None:
+        valid_at_pos = [rid for px, py, rid in pending_valid if px == x and py == y]
+        if not valid_at_pos:
+            return jsonify({"error": "Invalid placement position"}), 400
+        placed_tile_id = rotation_id
+    else:
+        for px, py, rid in pending_valid:
+            if px == x and py == y:
+                placed_tile_id = rid
+                break
 
-    if tile_id is None:
+    if placed_tile_id is None:
         return jsonify({"error": "Invalid placement"}), 400
 
     # Engine places tile, bag removes all 4 rotations
-    game_state.place_tile(x, y, tile_set[tile_id])
-    tile_bag_instance.remove_tile(tile_id)
+    game_state.place_tile(x, y, tile_set[placed_tile_id])
+    tile_bag_instance.remove_tile(placed_tile_id)
 
     pending_tile = None
     pending_valid = []
@@ -152,7 +160,7 @@ def place_tile():
 
     return jsonify({
         "status": "ok",
-        "placed": tile_id,
+        "placed": placed_tile_id,
         "position": [x, y],
         "turn": game_state.current_turn,
         "current_player": game_state.currentIndex,
