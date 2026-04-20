@@ -1,5 +1,6 @@
 import tile_set
 import data
+from collections import defaultdict
 
 
 def create_ID(tile_id):
@@ -126,15 +127,53 @@ class tile_bag:
         # Round for nice viewing
         return (round(chance, 2), len(match_ind_tiles))
     
+class empty_bag():
 
-# Code to be used in individual demo
-bag = tile_bag()
-tile = bag.find_tile_id("ID20")
-print(tile)
-bag.remove_tile(20)
-print("Remove tile id 20")
-tile = bag.find_tile_id(20)
-print(tile)
-print("Find a tile that all sides are grassland")
-prediction = bag.tile_predict(0,0,0,0)
-print(f"This is a {prediction[0]} chance to get this tile and {prediction[1]} tiles remain")
+    def __init__(self):
+        self.bag = {}
+    
+    ## Function to be able to see what tiles the bag contains totally
+    def __str__(self):
+        string = ""
+        for i in self.bag:
+            string += (str(i) + ": " + str(self.bag[i]) + "\n")
+        return string
+    
+    def add_tile(self, tile_id, tile_coords):
+        self.bag[tile_coords] = tile_id
+
+    def predict_move(self, tile_id):
+        bounds = find_tile_bounds(tile_id)
+        tiles = []
+        for i in range(bounds[0], bounds[1] + 1):
+            tiles.append(create_ID(i))
+        moves = defaultdict(list)
+        for tile in tiles:
+            predict_tile = tile_set.tile_set.get(tile)
+            for key, value in self.bag.items():
+                print(tile)
+                current_tile = tile_set.tile_set.get(value)
+                if (current_tile.up == predict_tile.down):
+                    ## Tile can be placed above current tile
+                    predict_coords = (key[0], key[1] + 1)
+                    moves[predict_coords].append(tile)
+                
+                if (current_tile.down == predict_tile.up):
+                    ## Tile can be placed below current tile
+                    predict_coords = (key[0], key[1] - 1)
+                    moves[predict_coords].append(tile)
+                
+                if (current_tile.left == predict_tile.right):
+                    ## Tile can be placed to the left of current tile
+                    predict_coords = (key[0] - 1, key[1])
+                    moves[predict_coords].append(tile)
+                
+                if (current_tile.right == predict_tile.left):
+                    ## Tile can be placed to the right of current tile
+                    predict_coords = (key[0] + 1, key[1])
+                    moves[predict_coords].append(tile)
+        return moves
+
+bag = empty_bag()
+bag.add_tile("ID0", (0,0))
+print(bag.predict_move("ID8"))
