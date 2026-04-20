@@ -202,7 +202,16 @@ def playTurn(game, tileBag):
     game.manage_structures(x, y, tile_obj)
 
     #assuming tile obj already has meeple_attached populated or not populated
-    game.place_meeple(tile_obj)
+    """
+    wait here until meeple detected or next tile detected
+
+    if meeple detected 
+        tile_obj.meeple_attached = meeple_coords; - from cv
+        game.place_meeple(tile_obj)
+    else just advance to next turn
+    
+    """
+
 
     # Advanced to next turn
     game.next_player()

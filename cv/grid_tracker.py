@@ -90,19 +90,47 @@ class GridTracker:
         return cv.countNonZero(blob_mask[y1:y2, x1:x2])
 
     def best_coverage_slot(self, diff_mask):
-        """Return the open slot with the highest diff-pixel coverage, or None.
+        """Return (slot, coverage) for the open slot with the highest diff-pixel coverage.
 
-        Scores every open slot by how many newly-placed pixels fall within its
-        expected bounding box.  More robust than centroid detection because a
-        displacement of up to half a tile width still picks the correct slot.
+        Scores every open slot by how many diff pixels fall within its expected
+        bounding box.  More robust than centroid detection: a displacement of up
+        to ±half-tile still picks the correct slot, and per-slot counting is not
+        skewed by MORPH_CLOSE halos elsewhere in the diff.
+
+        Call with sat_in_diff (= cv.bitwise_and(sat_blobs, diff_mask)) rather
+        than raw diff_mask: MORPH_CLOSE halos are empty table with zero saturation,
+        so they score exactly 0, while real tile pixels score high.
+
+        Returns (None, 0) if no open slots are found or all have zero coverage.
         """
         if self.a is None:
-            return None
+            return None, 0
         best_slot, best_cov = None, 0
         for slot in self.open_slots():
             cov = self.cell_coverage(diff_mask, *slot)
             if cov > best_cov:
                 best_cov, best_slot = cov, slot
+        return best_slot, best_cov
+
+    def closest_slot(self, diff_cx, diff_cy):
+        """Return the open slot whose predicted pixel centre is closest to the
+        diff centroid, or None if no slot is within one tile-width.
+
+        Used as a diagnostic cross-check against best_coverage_slot.  The raw
+        diff centroid is biased outward by MORPH_CLOSE halos and is unreliable
+        when a hand is in frame, so it should NOT be the primary detection method.
+        """
+        if self.a is None or diff_cx is None or diff_cy is None:
+            return None
+        best_slot, best_dist = None, float('inf')
+        for slot in self.open_slots():
+            px = self.origin_px[0] + slot[0] * self.a + slot[1] * self.b
+            py = self.origin_px[1] + slot[0] * self.b - slot[1] * self.a
+            dist = float(np.hypot(px - diff_cx, py - diff_cy))
+            if dist < best_dist:
+                best_dist, best_slot = dist, slot
+        if best_slot is None or best_dist > self.tile_size_px:
+            return None
         return best_slot
 
     def slot_centroid(self, diff_mask, gx, gy):
@@ -155,7 +183,7 @@ class GridTracker:
         this gives 2N equations and 4 unknowns, so the fit improves with each
         placement and corrects both drift and rotation simultaneously.
         """
-        if len(self.tile_centroids) < 2:
+        if len(self.tile_centroids) < 3:
             return
         rows_A, rhs = [], []
         for (gx, gy), (px, py) in self.tile_centroids.items():

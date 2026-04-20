@@ -14,11 +14,11 @@ CANNY_LOW          = 40
 CANNY_HIGH         = 100
 DENSITY_BLUR       = 21   # Keeps edge density concentrated around tile edges
 DENSITY_THRESHOLD  = 8    # Background grain stays below this
-MORPH_OPEN_KERNEL  = 15   # Removes isolated noise blobs smaller than this
-MORPH_CLOSE_KERNEL = 30   # Fills intra-tile gaps; must stay < tile_size/2
-                           # (~25px for 50px tiles) so it can't bridge empty cells
-SAT_THRESHOLD      = 40   # Min HSV saturation (0–255) to count as tile colour
-TILE_AREA_MIN      = 1000
+MORPH_OPEN_KERNEL  = 7    # Removes isolated noise blobs smaller than this
+MORPH_CLOSE_KERNEL = 45   # Fills intra-tile gaps; must stay < tile_size/2
+                           # (~40px for 80-90px tiles at 1080p processing res)
+SAT_THRESHOLD      = 80   # Min HSV saturation (0–255) to count as tile colour
+TILE_AREA_MIN      = 3000
 TILE_AREA_MAX      = 100_000_000
 
 

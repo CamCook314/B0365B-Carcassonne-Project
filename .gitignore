@@ -3,3 +3,14 @@
 
 engine/__pycache__/
 *.pyc
+
+# CV — session-specific files
+cv/tile_crops/
+cv/tile_crops_auto/
+cv/brio_photos/
+
+# CV — debug/test artefacts
+debug_img.png
+debug_mask.png
+camera_*.jpg
+cv/test_photo.jpg
