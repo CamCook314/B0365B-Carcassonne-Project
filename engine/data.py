@@ -81,6 +81,8 @@ class gameStateClass:
 	# col_offset becomes 10, so x=-1 maps to array_col = -1 + 10 = 9.
 	# this way the game logic can use any coordinate (including negatives)
 	# while the underlying array always uses positive indexes.
+
+	# Helper function to convert logical x,y coordinates to the 2d list indexes
 	def to_array_index(self, x, y):
 		array_row = -y + self.row_offset
 		array_col = x + self.col_offset
