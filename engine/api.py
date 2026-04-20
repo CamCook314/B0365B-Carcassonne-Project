@@ -10,6 +10,7 @@ CORS(app)
 
 game_state = None
 tile_bag_instance = None
+empty_bag_instance = None
 pending_tile = None
 pending_valid = []    # list of [x, y, rotation_id]
 
@@ -68,9 +69,7 @@ def start_game():
 
     game_state = initialiseBoard(num_players)
     tile_bag_instance = tile_bag.tile_bag()
-
-    for tile_id, _, _ in STARTING_RIVER:
-        tile_bag_instance.remove_tile(tile_id)
+    empty_bag_instance = tile_bag.empty_bag()
 
     pending_tile = None
     pending_valid = []
@@ -96,6 +95,8 @@ def set_pending():
 
     # Engine checks all 4 rotations and returns valid placements
     all_valid = get_valid_placements_all_rotations(game_state, base_num)
+
+    ## NEED TO ADD ADDING VALID TILES TO EMPTY TILE BAGS
 
     if not all_valid:
         return jsonify({"error": "No valid placements for this tile"}), 400

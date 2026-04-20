@@ -57,8 +57,8 @@ def gameStart():
     tileBag = tile_bag.tile_bag()
 
     # Remove river tiles from bag since they're pre-placed for testing
-    for tile_id, _, _ in STARTING_RIVER:
-        tileBag.remove_tile(tile_id)
+    # for tile_id, _, _ in STARTING_RIVER:
+    #     tileBag.remove_tile(tile_id)
 
     game = initialiseBoard(NUM_PLAYERS)
     game_state = game
@@ -104,9 +104,9 @@ def initialiseBoard(num_players):
 
     game = gameStateClass(players)
 
-    # Temp code for testing river
-    for tile_id, x, y in STARTING_RIVER:
-        game.place_tile(x, y, tile_set[tile_id])
+    # # Temp code for testing river
+    # for tile_id, x, y in STARTING_RIVER:
+    #     game.place_tile(x, y, tile_set[tile_id])
     
     
     return game
