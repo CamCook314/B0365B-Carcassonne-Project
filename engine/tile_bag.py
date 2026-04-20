@@ -151,29 +151,71 @@ class empty_bag():
         for tile in tiles:
             predict_tile = tile_set.tile_set.get(tile)
             for key, value in self.bag.items():
-                print(tile)
+                current_coords = key
                 current_tile = tile_set.tile_set.get(value)
                 if (current_tile.up == predict_tile.down):
-                    ## Tile can be placed above current tile
+                    ## Tile can be placed above current tile now check surrounding tiles
                     predict_coords = (key[0], key[1] + 1)
+                    if (self.bag.get((predict_coords[0] - 1, predict_coords[1]))) != None:
+                        pass
+                    if (self.bag.get((predict_coords[0] + 1, predict_coords[1]))) != None:
+                        pass
+                    if (self.bag.get((predict_coords[0], predict_coords[1] + 1))) != None:
+                        pass
                     moves[predict_coords].append(tile)
                 
                 if (current_tile.down == predict_tile.up):
                     ## Tile can be placed below current tile
                     predict_coords = (key[0], key[1] - 1)
+                    if (self.bag.get((predict_coords[0] - 1, predict_coords[1]))) != None:
+                        pass
+                    if (self.bag.get((predict_coords[0] + 1, predict_coords[1]))) != None:
+                        pass
+                    if (self.bag.get((predict_coords[0], predict_coords[1] - 1))) != None:
+                        pass
                     moves[predict_coords].append(tile)
                 
                 if (current_tile.left == predict_tile.right):
                     ## Tile can be placed to the left of current tile
                     predict_coords = (key[0] - 1, key[1])
+                    if (self.bag.get((predict_coords[0] - 1, predict_coords[1]))) != None:
+                        pass
+                    if (self.bag.get((predict_coords[0], predict_coords[1] + 1))) != None:
+                        pass
+                    if (self.bag.get((predict_coords[0], predict_coords[1] - 1))) != None:
+                        pass
                     moves[predict_coords].append(tile)
                 
                 if (current_tile.right == predict_tile.left):
                     ## Tile can be placed to the right of current tile
                     predict_coords = (key[0] + 1, key[1])
+                    if (self.bag.get((predict_coords[0] + 1, predict_coords[1]))) != None:
+                        pass
+                    if (self.bag.get((predict_coords[0], predict_coords[1] + 1))) != None:
+                        pass
+                    if (self.bag.get((predict_coords[0], predict_coords[1] - 1))) != None:
+                        pass
                     moves[predict_coords].append(tile)
         return moves
+    
+    def check_tiles(self, current_id, predict_id, direction):
+        current_tile = tile_set.tile_set.get(current_id)
+        predict_tile = tile_set.tile_set.get(predict_id)
+        check = False
+        if direction == "UP":
+            if (current_tile.up == predict_tile.down):
+                check = True
+        elif direction == "DOWN":
+            if (current_tile.down == predict_tile.up):
+                check = True
+        elif direction == "LEFT":
+            if (current_tile.left == predict_tile.right):
+                check = True
+        elif direction == "RIGHT":
+            if (current_tile.right == predict_tile.left):
+                check = True
+        return check
 
 bag = empty_bag()
 bag.add_tile("ID0", (0,0))
-print(bag.predict_move("ID8"))
+print(bag.predict_move("ID4"))
