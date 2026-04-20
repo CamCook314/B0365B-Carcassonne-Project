@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getGameState, startGame, setPendingTile } from "./api";
+import { getGameState, startGame, setPendingTile, setPendingTileList} from "./api";
 import GameBoard from "./Gameboard";
 import "./App2.css";
 
@@ -13,6 +13,7 @@ export default function App2() {
 
   // Pending tile from CV (via API)
   const pendingTile = gameState?.pending_tile || null;
+  const pendingTileList = gameState?.tile_ids || [];
   const validPlacements = gameState?.pending_valid || [];
 
   // Fetch game state from API
@@ -28,6 +29,18 @@ export default function App2() {
       setLoading(false);
     }
   };
+
+  const fetchTileList = async (tileIds) => {
+    try {
+      const tiles = await setPendingTileList(tileIds);
+      console.log("Fetched tile list:", tiles);
+
+      await fetchState(); // Refresh game state after fetching tiles
+      return tiles;
+    } catch (err) {
+      console.error("Error fetching tile list:", err);
+    }
+  }
 
   const handleSetPending = async () => {
     try {
@@ -310,15 +323,12 @@ export default function App2() {
                     <button
                       onClick={() => setPendingTile(Number(pendingInput))}
                       style={{
-                        padding: "8px 14px",
+                        padding: "8px 8px",
                         background: "var(--accent)",
                         color: "var(--bg)",
-                        border: "none",
-                        borderRadius: 6,
-                        cursor: "pointer",
                       }}
                     >
-                      Set Pending
+                      {pendingTileList[0]}
                     </button>
                   </div>
                 </>

@@ -10,6 +10,7 @@ Endpoints:
 - POST /start: Start a new game
 - POST /pending: Set a pending tile for placement
 - POST /pending/change: Change the pending tile
+- POST /pending/list: Sets the list of most similar tiles from cv
 - POST /pending/clear: Clear pending tile
 - POST /place: Place a tile on the board
 - POST /reset: Reset the game
@@ -18,6 +19,7 @@ Global State:
 - game_state: Current game state object
 - tile_bag_instance: Tile bag for drawing tiles
 - pending_tile: Tile currently detected by CV
+- pending_tile_list: List of most similar tiles detected by CV
 - pending_valid: List of valid placements for pending tile
 """
 
@@ -36,6 +38,7 @@ game_state = None  # Current game state object
 tile_bag_instance = None  # Tile bag instance
 pending_tile = None  # Tile ID detected by CV (e.g., "ID40")
 pending_valid = []  # List of [x, y, rotation_id] for valid placements
+pending_tile_list = [] # List of most similar tiles detected by CV
 
 
 @app.route('/gamestate', methods=['GET'])
@@ -195,6 +198,26 @@ def change_pending():
 
     return jsonify(result)
 
+@app.route('/pending/list', methods=['POST'])
+def set_pending_list():
+    """
+    Sets the list of pending tiles to the top 4 tiles detected by the cv
+    >> Allow the user to select one of these in the frontend to change the active tile
+    """
+    data = request.get_json()
+    tile_ids = data.get("tile_ids")
+
+    if not tile_ids or not isinstance(tile_ids, list):
+        return jsonify({"error": "Missing or invalid 'tile_ids' field"}), 400
+
+    # set the first tile in the list as the pending tile and return valid placements
+    success, result = _validate_and_set_pending(tile_ids[0])
+
+    if not success:
+        return jsonify({"error": result}), 400
+
+    return jsonify(result)
+
 @app.route('/pending/clear', methods=['POST'])
 def clear_pending():
     """
@@ -203,9 +226,10 @@ def clear_pending():
     Returns:
         JSON: {"status": "ok"}
     """
-    global pending_tile, pending_valid
+    global pending_tile, pending_valid, pending_tile_list
     pending_tile = None
     pending_valid = []
+    pending_tile_list = []
     return jsonify({"status": "ok"})
 
 
