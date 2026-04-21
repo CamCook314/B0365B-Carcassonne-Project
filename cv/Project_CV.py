@@ -5,7 +5,7 @@ Drives the phase state machine and owns all board-level state.
 Image processing lives in blob_pipeline.py.
 Grid coordinate logic lives in grid_tracker.py.
 """
-
+import requests
 import cv2 as cv
 import numpy as np
 import ctypes
@@ -564,31 +564,44 @@ def cv_main_loop():
                        cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
         # --- Engine communication ---
-        if grid_checked and tile_checked:
-            print("Communicating — waiting for engine response...")
-            cv_to_engine = True
-            while not game_response[0]:   # Block until interface sets game_response[0] = True
-                time.sleep(0.05)
-            is_valid      = (game_response[1] == 1)
-            game_response = (False, game_response[1])
-            cv_to_engine  = False
-            grid_coord    = None
-            grid_checked  = False
+        # tile just identified
+        if tile_checked:
+            try:
+                r = requests.post("http://127.0.0.1:1234/pending",
+                                json={"tile_id": tile_id}, timeout=5)
+                if not r.ok:
+                    print(f"/pending rejected: {r.json().get('error')}")
+            except requests.RequestException as e:
+                print(f"API error on /pending: {e}")
+            tile_checked = False
+
+        # placement detected
+        if grid_checked:
+            try:
+                r = requests.post("http://127.0.0.1:1234/place",
+                                json={"x": int(grid_coord[0]),
+                                        "y": int(grid_coord[1]), 
+                                        "tile_id": tile_id}, timeout=5)
+                is_valid = r.ok
+            except requests.RequestException as e:
+                print(f"API error on /place: {e}")
+                is_valid = False
+
+            grid_coord   = None
+            grid_checked = False
 
             if is_valid:
-                tile_id      = None
-                tile_checked = False
-                print("Finished communicating — placement accepted.")
+                tile_id = None
+                print("Placement accepted.")
             else:
                 grid_tracker.restore()
-                prev_board_area     = rollback_prev_board_area
-                prev_sat_area       = rollback_prev_sat_area
-                last_placed_coord   = rollback_last_coord
-                stable_board_mask   = rollback_stable_board_mask
-                tile_saved        = True   # Tile identity already known — skip re-scan
-                phase             = INVALID_DISPLAY
+                prev_board_area = rollback_prev_board_area
+                prev_sat_area = rollback_prev_sat_area
+                last_placed_coord = rollback_last_coord
+                tile_saved = True
+                phase = INVALID_DISPLAY
                 removal_frame_count = 0
-                print("Finished communicating — placement rejected. Remove tile and reposition.")
+                print("Placement rejected. Remove tile and reposition.")
 
         panel_w, panel_h = DISP_W // 2, DISP_H // 2
         def to_bgr(img):

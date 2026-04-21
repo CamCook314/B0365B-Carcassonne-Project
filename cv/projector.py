@@ -50,7 +50,7 @@ while True:
     # Read in test img
     test_img = cv.imread(img_path, cv.IMREAD_COLOR)
 
-    resized_img = cv.resize(test_img, (50, 50))
+    resized_img = cv.resize(test_img, (85, 85))
 
     # Get random coords
     fh, fw = canvas.shape[:2]
@@ -68,4 +68,4 @@ while True:
     if c == ord('q'):
         break
 
-    time.sleep(1)
+    time.sleep(2)
