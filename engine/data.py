@@ -1,3 +1,6 @@
+
+from tile_set import tile_set
+
 # Variable declarations
 
 class tile:
@@ -303,6 +306,36 @@ class gameStateClass:
 				for players in struct.players: # should only be one player tho
 					players.score += temp_score
 
+
+	def get_valid_placements(self, tile_obj):
+		valid = []
+		for (x, y), t in self.get_board_xy().items():
+			# check all 4 neighbors of each placed tile
+			neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+			for neighbor_x, neighbor_y in neighbors:
+				if game.check_valid_placement(neighbor_x, neighbor_y, tile_obj):
+					valid.append((neighbor_x, neighbor_y))
+		# also check (0,0) if board is empty
+		if not self.get_board_xy() and self.check_valid_placement(0, 0, tile_obj):
+			valid.append((0, 0))
+		return list(set(valid))
+	
+
+	def get_valid_placements_all_rotations(self, base_tile_num):
+		base = base_tile_num * 4
+		all_valid = {}
+		
+		for r in range(4):
+			rid = f"ID{base + r}"
+			if rid not in tile_set:
+				continue
+			tile_obj = tile_set[rid]
+			valid = self.get_valid_placements(self, tile_obj)
+			for x, y in valid:
+				if (x, y) not in all_valid:
+					all_valid[(x, y)] = rid
+		
+		return all_valid
 	def __repr__(self):
 		return f"board={self.board}"
 	
