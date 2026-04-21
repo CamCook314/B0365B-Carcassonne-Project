@@ -18,12 +18,13 @@ import time
 
 # --- Communication globals ---
 # Written by CV, read by the engine (or cv_test_interface.py during development).
-tile_checked  = False        # True once a tile has been identified
-tile_id       = None         # Bare tile ID string, e.g. "ID43"
-grid_checked  = False        # True once placement coordinates are ready
-grid_coord    = None         # (gx, gy) tuple in CV coordinate space
-cv_to_engine  = False        # Raised when CV has a placement ready for the engine
-game_response = (False, 1)   # (responded_bool, result_int); 1 = valid, 0 = invalid
+tile_checked      = False        # True once a tile has been identified
+tile_id           = None         # Bare tile ID string, e.g. "ID43"
+tile_id_override  = None         # Set by the bridge when the user corrects the CV's identification
+grid_checked      = False        # True once placement coordinates are ready
+grid_coord        = None         # (gx, gy) tuple in CV coordinate space
+cv_to_engine      = False        # Raised when CV has a placement ready for the engine
+game_response     = (False, 1)   # (responded_bool, result_int); 1 = valid, 0 = invalid
 
 
 def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
@@ -486,7 +487,8 @@ def cv_main_loop():
                                 # Crop using the observed centroid (not the grid prediction) so
                                 # the tile is well-centred even when the grid fit isn't perfect.
                                 if tile_id is not None:
-                                    family_id    = tile_id
+                                    family_id    = tile_id_override if tile_id_override is not None else tile_id
+                                    tile_id_override = None
                                     board_angle  = np.degrees(
                                         np.arctan2(grid_tracker.b, grid_tracker.a))
                                     placed_crop  = crop_placed_slot(
