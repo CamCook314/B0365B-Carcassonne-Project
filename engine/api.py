@@ -3,6 +3,7 @@ from flask_cors import CORS
 from tile_set import tile_set
 import tile_bag
 from main import (initialiseBoard, get_valid_placements_all_rotations, STARTING_RIVER)
+import subprocess
 
 app = Flask(__name__)
 app.json.sort_keys = False
@@ -179,5 +180,7 @@ def reset_game():
 
 
 if __name__ == "__main__":
+    from pathlib import Path
+    subprocess.Popen(["npm", "run", "dev"], cwd=Path(__file__).parent.parent / "frontend")
     print("API running on http://127.0.0.1:1234")
-    app.run(host="127.0.0.1", port=1234, debug=True)
+    app.run(host="127.0.0.1", port=1234, debug=True, use_reloader=False)

@@ -12,7 +12,7 @@ The grid model accounts for board rotation.  If the board is rotated θ degrees
 clockwise from horizontal, a tile at grid position (gx, gy) sits at pixel:
 
     px = origin_x + gx·a + gy·b
-    py = origin_y + gx·b − gy·a
+    py = origin_y + gx·b - gy·a
 
 where  a = tile_size·cos(θ)  and  b = tile_size·sin(θ).
 
