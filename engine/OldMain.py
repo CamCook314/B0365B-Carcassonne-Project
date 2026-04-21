@@ -57,8 +57,8 @@ def gameStart():
     tileBag = tile_bag.tile_bag()
 
     # Remove river tiles from bag since they're pre-placed for testing
-    for tile_id, _, _ in STARTING_RIVER:
-        tileBag.remove_tile(tile_id)
+    # for tile_id, _, _ in STARTING_RIVER:
+    #     tileBag.remove_tile(tile_id)
 
     game = initialiseBoard(NUM_PLAYERS)
     game_state = game
@@ -69,7 +69,7 @@ def gameStart():
     while game.remaining_pieces > 0:
         playTurn(game, tileBag)
 
-    scoreEndGame(game)
+    #scoreEndGame(game)
 
     # LEGACY CODE BELOW
 
@@ -104,9 +104,9 @@ def initialiseBoard(num_players):
 
     game = gameStateClass(players)
 
-    # Temp code for testing river
-    for tile_id, x, y in STARTING_RIVER:
-        game.place_tile(x, y, tile_set[tile_id])
+    # # Temp code for testing river
+    # for tile_id, x, y in STARTING_RIVER:
+    #     game.place_tile(x, y, tile_set[tile_id])
     
     
     return game
@@ -219,7 +219,7 @@ def playTurn(game, tileBag):
     printBoard(game)
 
 
-
+"""
 def scoreEndGame(game):
     for struct in game.structures:
         temp_score = 0
@@ -247,7 +247,7 @@ def scoreEndGame(game):
                     temp_score += 1
             for players in struct.players: # should only be one player tho
                 players.score += temp_score
-
+"""
 
 
 # Test Game

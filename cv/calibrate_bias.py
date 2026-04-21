@@ -9,8 +9,8 @@ Workflow:
     1. Hold a Carcassonne tile in front of the camera (on its own, no board)
     2. Press SPACE to capture the current crop
     3. The top-8 matching reference tiles are shown alongside the capture
-    4. Press 1–8 to confirm the correct match, or 's' to skip
-    5. Repeat for 10–20 tiles for a stable bias estimate
+    4. Press 1-8 to confirm the correct match, or 's' to skip
+    5. Repeat for 10-20 tiles for a stable bias estimate
     6. Press 'q' to compute the mean bias and save it to cv/bias.pt
 
 The saved bias vector is automatically loaded by Project_CV at startup.

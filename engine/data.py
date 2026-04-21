@@ -81,6 +81,8 @@ class gameStateClass:
 	# col_offset becomes 10, so x=-1 maps to array_col = -1 + 10 = 9.
 	# this way the game logic can use any coordinate (including negatives)
 	# while the underlying array always uses positive indexes.
+
+	# Helper function to convert logical x,y coordinates to the 2d list indexes
 	def to_array_index(self, x, y):
 		array_row = -y + self.row_offset
 		array_col = x + self.col_offset
@@ -273,6 +275,34 @@ class gameStateClass:
 					board_xy[(x, y)] = self.board[array_row][array_col]
 		return board_xy
 
+	def score_end_game(self):
+		for struct in self.structures:
+			temp_score = 0
+			if struct.type == 1:
+				temp_score += len(struct.tiles_used)
+				for players in struct.players:
+					players.score += temp_score
+			elif struct.type == 2:
+				for tiles in struct.tiles_used:
+					if tiles.attribute == 1:
+						temp_score += 2
+					else:
+						temp_score += 1
+				for players in struct.players:
+					players.score += temp_score
+			elif struct.type == 3:
+				row = struct.tiles_used[0][1]
+				col = struct.tiles_used[0][2]
+				all_neighbors = [
+					(row - 1, col - 1), (row - 1, col), (row - 1, col + 1),
+					(row,   col - 1), (row,   col), (row,   col + 1),
+					(row + 1, col - 1), (row + 1, col), (row + 1, col + 1)]
+				for nr, nc in all_neighbors:
+					if self.board[nr][nc] is not None:
+						temp_score += 1
+				for players in struct.players: # should only be one player tho
+					players.score += temp_score
+
 	def __repr__(self):
 		return f"board={self.board}"
 	
@@ -285,7 +315,7 @@ class structures:
 	and all tiles involved will be tracked for scoring
 	"""
 
-	def __init__(self, first_tile,row, col, structure):
+	def __init__(self, first_tile, row, col, structure):
 		"""
 		Initialise structure
 
