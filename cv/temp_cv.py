@@ -333,31 +333,7 @@ def cv_main_loop():
             cv.putText(result, f"Last placed: {last_placed_coord}", (10, 30),
                        cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
-        # --- Engine communication ---
-        # if grid_checked and tile_checked:
-        #     print("Communicating")
-        #     cv_to_engine = True
-        #     is_valid      = (game_response[1] == 1)
-        #     game_response = (False, game_response[1])
-        #     cv_to_engine  = False
-        #     grid_coord    = None
-        #     grid_checked  = False
-
-        #     if is_valid:
-        #         tile_id      = None
-        #         tile_checked = False
-        #         print("Finished communicating — placement accepted.")
-        #     else:
-        #         grid_tracker.restore()
-        #         prev_board_area   = rollback_prev_board_area
-        #         prev_sat_area     = rollback_prev_sat_area
-        #         last_placed_coord = rollback_last_coord
-        #         tile_saved        = True   # Tile identity already known — skip re-scan
-        #         phase             = INVALID_DISPLAY
-        #         removal_frame_count = 0
-        #         print("Finished communicating — placement rejected. Remove tile and reposition.")
         
-        # --- Engine communication ---
         # tile just identified
         if tile_checked:
             try:
@@ -397,10 +373,10 @@ def cv_main_loop():
                 print("Placement rejected. Remove tile and reposition.")
 
 
-        cv.imshow("1: Edges (Canny)", edges)
-        cv.imshow("2: Density map", density)
-        cv.imshow("3: Blobs + threshold", blobs)
-        cv.imshow("4: Tile outlines", result)
+        # cv.imshow("1: Edges (Canny)", edges)
+        # cv.imshow("2: Density map", density)
+        # cv.imshow("3: Blobs + threshold", blobs)
+        # cv.imshow("4: Tile outlines", result)
 
         time.sleep(1)
 
