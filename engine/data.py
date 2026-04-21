@@ -276,7 +276,7 @@ class gameStateClass:
 		return board_xy
 
 	def score_end_game(self):
-		for struct in game.structures:
+		for struct in self.structures:
 			temp_score = 0
 			if struct.type == 1:
 				temp_score += len(struct.tiles_used)
@@ -298,7 +298,7 @@ class gameStateClass:
 					(row,   col - 1), (row,   col), (row,   col + 1),
 					(row + 1, col - 1), (row + 1, col), (row + 1, col + 1)]
 				for nr, nc in all_neighbors:
-					if game.board[nr][nc] is not None:
+					if self.board[nr][nc] is not None:
 						temp_score += 1
 				for players in struct.players: # should only be one player tho
 					players.score += temp_score
@@ -315,7 +315,7 @@ class structures:
 	and all tiles involved will be tracked for scoring
 	"""
 
-	def __init__(self, first_tile,row, col, structure):
+	def __init__(self, first_tile, row, col, structure):
 		"""
 		Initialise structure
 
