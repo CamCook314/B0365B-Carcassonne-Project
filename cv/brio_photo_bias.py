@@ -14,7 +14,7 @@ Usage:
            python cv/brio_photo_bias.py --dir path/to/photos
 
 For each photo the top-8 reference matches are shown side-by-side.
-Press 1–8 to confirm the correct match, 's' to skip, 'q' to quit and save.
+Press 1-8 to confirm the correct match, 's' to skip, 'q' to quit and save.
 
 Bias is saved to cv/bias.pt and loaded automatically by Project_CV at startup.
 """

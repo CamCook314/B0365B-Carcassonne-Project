@@ -114,7 +114,7 @@ def cv_main_loop():
     embeddings        = image_match.load_embeddings()
     bias              = image_match.load_bias()
 
-    cap = cv.VideoCapture(0)
+    cap = cv.VideoCapture(0, cv.CAP_DSHOW)
     cap.set(cv.CAP_PROP_FRAME_WIDTH,  3840)
     cap.set(cv.CAP_PROP_FRAME_HEIGHT, 2160)
     if not cap.isOpened():

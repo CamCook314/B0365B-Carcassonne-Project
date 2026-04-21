@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import "./GameBoard.css";
+import "./Gameboard.css";
 
 const PLAYER_COLORS = ["#BF616A", "#81A1C1", "#A3BE8C", "#EBCB8B", "#B48EAD"];
 const CELL = 52; // tile size + gap
