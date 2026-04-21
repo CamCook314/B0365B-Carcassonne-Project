@@ -5,7 +5,6 @@ Drives the phase state machine and owns all board-level state.
 Image processing lives in blob_pipeline.py.
 Grid coordinate logic lives in grid_tracker.py.
 """
-import requests
 import cv2 as cv
 import numpy as np
 import ctypes
@@ -20,6 +19,7 @@ import time
 # Written by CV, read by the engine (or cv_test_interface.py during development).
 tile_checked      = False        # True once a tile has been identified
 tile_id           = None         # Bare tile ID string, e.g. "ID43"
+tile_candidates   = []           # Top-N (score, tile_id) list from match_image; set alongside tile_checked
 tile_id_override  = None         # Set by the bridge when the user corrects the CV's identification
 grid_checked      = False        # True once placement coordinates are ready
 grid_coord        = None         # (gx, gy) tuple in CV coordinate space
@@ -50,6 +50,13 @@ def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
     y2_roi = min(int(cy) + side + margin, frame.shape[0])
     roi = frame[y1_roi:y2_roi, x1_roi:x2_roi]
 
+    print(f"  [crop_placed_slot] src={'center' if center_px is not None else 'slot'}"
+          f"  proc=({src[0]:.0f},{src[1]:.0f})  full-res=({cx:.0f},{cy:.0f})"
+          f"  frame={frame.shape[1]}x{frame.shape[0]}"
+          f"  tile_size_px={tile_size_px:.1f}  ts={ts:.1f}  side={side}"
+          f"  ROI=({x1_roi},{y1_roi})->({x2_roi},{y2_roi})  roi_shape={roi.shape}"
+          f"  angle={board_angle_deg:.1f}°")
+
     cx_roi = cx - x1_roi
     cy_roi = cy - y1_roi
     M = cv.getRotationMatrix2D((cx_roi, cy_roi), board_angle_deg, 1.0)
@@ -60,7 +67,9 @@ def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
     y1 = max(int(cy_roi) - side // 2, 0)
     x2 = min(int(cx_roi) + side // 2, rotated.shape[1])
     y2 = min(int(cy_roi) + side // 2, rotated.shape[0])
-    return rotated[y1:y2, x1:x2]
+    crop = rotated[y1:y2, x1:x2]
+    print(f"  [crop_placed_slot] final crop shape={crop.shape}")
+    return crop
 
 
 def extract_tile_crop(frame, contour, proc_scale, padding=0.85):
@@ -118,6 +127,24 @@ def cv_main_loop():
     cap = cv.VideoCapture(0, cv.CAP_DSHOW)
     cap.set(cv.CAP_PROP_FRAME_WIDTH,  3840)
     cap.set(cv.CAP_PROP_FRAME_HEIGHT, 2160)
+    # Let the camera autofocus on the table surface, then lock and record the value.
+    # FOCUS_DISTANCE: if set to a value >= 0, autofocus is skipped and the camera
+    # jumps straight to this focus value (faster startup, consistent focus each run).
+    # Set to -1 to let autofocus settle first and print the discovered value instead.
+    FOCUS_DISTANCE = 14   # Brio MX locked at table distance (~80cm); -1 to re-discover
+
+    if FOCUS_DISTANCE >= 0:
+        cap.set(cv.CAP_PROP_AUTOFOCUS, 0)
+        cap.set(cv.CAP_PROP_FOCUS, FOCUS_DISTANCE)
+        print(f"Focus set to hardcoded value {FOCUS_DISTANCE} (autofocus disabled)")
+    else:
+        print("Waiting 3s for autofocus to settle on the table...")
+        time.sleep(3)
+        af_ok = cap.set(cv.CAP_PROP_AUTOFOCUS, 0)
+        focus_val = cap.get(cv.CAP_PROP_FOCUS)
+        print(f"Autofocus lock: {'OK' if af_ok else 'NOT SUPPORTED'}"
+              f"  focus value={focus_val:.0f}"
+              f"  (set FOCUS_DISTANCE={focus_val:.0f} to skip settle delay next run)")
     if not cap.isOpened():
         print("Error, camera not opened")
         exit()
@@ -192,7 +219,7 @@ def cv_main_loop():
     # the growth counter, so one flickering frame doesn't undo 2+ growth frames.
     non_growth_count = 0
 
-    global tile_checked, tile_id, grid_checked, grid_coord, cv_to_engine, game_response
+    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response
 
     print("Place the first tile then click any OpenCV window and press 'b'.")
 
@@ -259,11 +286,12 @@ def cv_main_loop():
                 print(f"Saved origin tile: {path}")
                 save_count += 1
 
-                results      = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
-                tile_id      = results[0][1]   # bare ID string, e.g. "ID43"
-                tile_checked = True
-                grid_coord   = (0, 0)
-                grid_checked = True
+                results         = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
+                tile_id         = results[0][1]   # bare ID string, e.g. "ID43"
+                tile_candidates = [(s, rid) for s, rid in results]
+                tile_checked    = True
+                grid_coord      = (0, 0)
+                grid_checked    = True
                 print("Origin tile identified — communicating (0, 0).")
                 for score, rid in results[:3]:
                     print(f"  {score:.4f}  {rid}")
@@ -329,9 +357,10 @@ def cv_main_loop():
                         candidate_tile_cnt    = None
                         candidate_tile_center = None
                         phase                 = WAIT_PLACEMENT
-                        results      = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
-                        tile_id      = results[0][1]
-                        tile_checked = True
+                        results         = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
+                        tile_id         = results[0][1]
+                        tile_candidates = [(s, rid) for s, rid in results]
+                        tile_checked    = True
                         print("Tile identified — waiting for it to be placed on the board.")
                         for score, rid in results[:3]:
                             print(f"  {score:.4f}  {rid}")
@@ -475,10 +504,17 @@ def cv_main_loop():
                                 # pixels — more accurate than the grid-predicted slot centre,
                                 # and used both for the refit and as the placed-crop centre.
                                 sc_x, sc_y = grid_tracker.slot_centroid(sat_in_diff, *best_slot)
+                                sat_src = "sat_in_diff"
                                 if sc_x is None:
                                     sc_x, sc_y = grid_tracker.slot_centroid(diff_mask, *best_slot)
+                                    sat_src = "diff_mask" if sc_x is not None else "NONE"
                                 use_cx = sc_x if sc_x is not None else diff_cx
                                 use_cy = sc_y if sc_y is not None else diff_cy
+                                centroid_src = sat_src if sc_x is not None else "diff_cx/cy (fallback)"
+                                print(f"  [centroid] src={centroid_src}  "
+                                      f"sc=({sc_x},{sc_y})  diff=({diff_cx},{diff_cy})  "
+                                      f"use=({use_cx:.0f},{use_cy:.0f})"
+                                      f"  slot_px={slot_px}  tile_size_px={grid_tracker.tile_size_px:.1f}")
                                 grid_tracker.confirm_placement(best_slot, use_cx, use_cy)
                                 last_placed_coord = best_slot
                                 print(f"Tile placed at grid {best_slot} — ready for next tile.")
@@ -566,31 +602,22 @@ def cv_main_loop():
                        cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
         # --- Engine communication ---
-        # tile just identified
-        if tile_checked:
-            try:
-                r = requests.post("http://127.0.0.1:1234/pending",
-                                json={"tile_id": tile_id}, timeout=5)
-                if not r.ok:
-                    print(f"/pending rejected: {r.json().get('error')}")
-            except requests.RequestException as e:
-                print(f"API error on /pending: {e}")
-            tile_checked = False
+        # tile_checked: bridge/interface reads this and calls /pending; nothing to do here.
 
-        # placement detected
+        # placement detected — signal bridge/interface and wait for their response
         if grid_checked:
-            try:
-                r = requests.post("http://127.0.0.1:1234/place",
-                                json={"x": int(grid_coord[0]),
-                                        "y": int(grid_coord[1]), 
-                                        "tile_id": tile_id}, timeout=5)
-                is_valid = r.ok
-            except requests.RequestException as e:
-                print(f"API error on /place: {e}")
-                is_valid = False
-
-            grid_coord   = None
+            cv_to_engine = True
             grid_checked = False
+
+            # Wait for bridge or cv_test_interface to write game_response
+            while not game_response[0]:
+                time.sleep(0.05)
+
+            is_valid = game_response[1] == 1
+            game_response = (False, 1)   # reset for next placement
+            cv_to_engine  = False
+
+            grid_coord = None
 
             if is_valid:
                 tile_id = None

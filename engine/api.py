@@ -2,8 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from tile_set import tile_set
 import tile_bag
-from main import (initialiseBoard, get_valid_placements_all_rotations, STARTING_RIVER)
-import subprocess
+from OldMain import (initialiseBoard, get_valid_placements_all_rotations, STARTING_RIVER)
 
 app = Flask(__name__)
 app.json.sort_keys = False
@@ -13,7 +12,8 @@ game_state = None
 tile_bag_instance = None
 empty_bag_instance = None
 pending_tile = None
-pending_valid = []    # list of [x, y, rotation_id]
+pending_valid = []           # list of [x, y, rotation_id]
+pending_candidates = []      # ranked list of tile_id strings from CV top-N matches
 
 
 @app.route('/gamestate', methods=['GET'])
@@ -50,6 +50,7 @@ def get_gamestate():
         "current_turn": game_state.current_turn,
         "pending_tile": pending_tile,
         "pending_valid": pending_valid,
+        "pending_candidates": pending_candidates,
     })
 
 
@@ -78,9 +79,28 @@ def start_game():
     return jsonify({"status": "ok", "players": num_players}), 201
 
 
+def _resolve_pending(tile_id):
+    """Shared logic: resolve tile_id → base_num, compute valid placements, update globals.
+    Returns (response_dict, error_str). On success error_str is None."""
+    global pending_tile, pending_valid, pending_candidates
+
+    if isinstance(tile_id, int):
+        base_num = tile_id
+    else:
+        base_num = int(tile_id.replace("ID", "")) // 4
+
+    all_valid = get_valid_placements_all_rotations(game_state, base_num)
+    if not all_valid:
+        return None, "No valid placements for this tile"
+
+    pending_tile = f"ID{base_num * 4}"
+    pending_valid = [[x, y, rid] for (x, y), rid in all_valid.items()]
+    return {"tile_id": pending_tile, "valid_positions": pending_valid}, None
+
+
 @app.route('/pending', methods=['POST'])
 def set_pending():
-    global pending_tile, pending_valid
+    global pending_candidates
 
     if game_state is None:
         return jsonify({"error": "Game not started"}), 400
@@ -88,40 +108,57 @@ def set_pending():
     data = request.get_json()
     tile_id = data.get("tile_id")
 
-    # Convert to base tile number
-    if isinstance(tile_id, int):
-        base_num = tile_id
-    else:
-        base_num = int(tile_id.replace("ID", "")) // 4
+    # Optional ranked candidate list from CV: list of tile_id strings in rank order
+    pending_candidates = data.get("candidates", [])
 
-    # Engine checks all 4 rotations and returns valid placements
-    all_valid = get_valid_placements_all_rotations(game_state, base_num)
+    result, err = _resolve_pending(tile_id)
+    if err:
+        return jsonify({"error": err}), 400
+    return jsonify(result)
 
-    ## NEED TO ADD ADDING VALID TILES TO EMPTY TILE BAGS
 
-    if not all_valid:
-        return jsonify({"error": "No valid placements for this tile"}), 400
+@app.route('/pending/override', methods=['POST'])
+def override_pending():
+    """Website calls this when the user selects a different tile than the CV detected.
+    Updates valid placements for the new tile and tells the CV to use this family
+    for post-placement rotation detection."""
+    import sys, os
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    try:
+        from cv import Project_CV
+    except ImportError:
+        Project_CV = None
 
-    pending_tile = f"ID{base_num * 4}"
-    pending_valid = [[x, y, rid] for (x, y), rid in all_valid.items()]
+    if game_state is None:
+        return jsonify({"error": "Game not started"}), 400
 
-    return jsonify({
-        "tile_id": pending_tile,
-        "valid_positions": pending_valid,
-    })
+    data = request.get_json()
+    tile_id = data.get("tile_id")
+    if not tile_id:
+        return jsonify({"error": "Missing tile_id"}), 400
+
+    result, err = _resolve_pending(tile_id)
+    if err:
+        return jsonify({"error": err}), 400
+
+    if Project_CV is not None:
+        Project_CV.tile_id_override = tile_id
+
+    return jsonify(result)
 
 
 @app.route('/pending/clear', methods=['POST'])
 def clear_pending():
-    global pending_tile, pending_valid
+    global pending_tile, pending_valid, pending_candidates
     pending_tile = None
     pending_valid = []
+    pending_candidates = []
     return jsonify({"status": "ok"})
 
 
 @app.route('/place', methods=['POST'])
 def place_tile():
-    global game_state, tile_bag_instance, pending_tile, pending_valid
+    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates
 
     if game_state is None:
         return jsonify({"error": "Game not started"}), 400
@@ -156,6 +193,7 @@ def place_tile():
 
     pending_tile = None
     pending_valid = []
+    pending_candidates = []
 
     game_state.next_player()
     game_state.current_turn += 1
@@ -171,16 +209,17 @@ def place_tile():
 
 @app.route('/reset', methods=['POST'])
 def reset_game():
-    global game_state, tile_bag_instance, pending_tile, pending_valid
+    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates
     game_state = None
     tile_bag_instance = None
     pending_tile = None
     pending_valid = []
+    pending_candidates = []
     return jsonify({"status": "ok"})
 
 
 if __name__ == "__main__":
-    from pathlib import Path
-    subprocess.Popen(["npm", "run", "dev"], cwd=Path(__file__).parent.parent / "frontend")
+    # Run api.py directly (without CV or frontend) for engine-only testing.
+    # For the full system, run engine/bridge.py instead.
     print("API running on http://127.0.0.1:1234")
     app.run(host="127.0.0.1", port=1234, debug=True, use_reloader=False)
