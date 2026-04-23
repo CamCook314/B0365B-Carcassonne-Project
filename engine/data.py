@@ -63,6 +63,9 @@ class gameStateClass:
 			new_rows = [([None] * cols) for _ in range(10)]
 			self.board = new_rows + self.board
 			self.row_offset += 10
+			for structure in self.structures:
+				structure.tiles_used = [(t, r + 10, c) for t, r, c in structure.tiles_used]
+
 
 		# expand downward
 		if array_row >= rows:
@@ -74,6 +77,8 @@ class gameStateClass:
 			for r in self.board:
 				r[:0] = [None] * 10
 			self.col_offset += 10
+			for structure in self.structures:
+				structure.tiles_used = [(t, r, c + 10) for t, r, c in structure.tiles_used]
 
 		# expand right
 		if array_col >= cols:
@@ -148,7 +153,6 @@ class gameStateClass:
 		if tile.attribute == 2: #Monastary
 			#Monastary detected
 			temp_struct = structures(tile, new_row, new_col, 3)
-			temp_struct.add_player(player)
 			self.structures.append(temp_struct)
 		for structure in self.structures:
 			if structure.check_completed(self.board):
@@ -162,10 +166,10 @@ class gameStateClass:
 		return self.players[self.currentIndex]
 
 	#Place meeple on tile and where on tile if it has multiple places
-	def place_meeple(self, tile):
-		if tile.meeple_attached[0] == 1:
+	def place_meeple(self, tile, direction):
+		if tile.meeple_attached == True:
 			raise ValueError("Meeple already placed on this tile")
-
+		
 		player = self.current_player()
 		if player.meeples <= 0:
 			raise ValueError("No meeples left")
@@ -173,21 +177,20 @@ class gameStateClass:
 		#tile.meeple_attached = (1, up, down, left, right)
 		player.meeples -= 1
 
-		directs = [] # This is so directions can be checked in the structures edges
-		if tile.meeple_attached[1] == 1:
-			directs.append("up")
-		elif tile.meeple_attached[2] == 1:
-			directs.append("down")
-		elif tile.meeple_attached[3] == 1:
-			directs.append("left")
-		elif tile.meeple_attached[4] == 1:
-			directs.append("right")
 
-		for direction in directs:
+		if tile.attribute == 2:
+			tile.meeple_attached = True
 			for structure in self.structures:
-				if (tile, direction) in structure.edges:
-					structure.add_player(self.current_player())
-					break
+				if structure.type == 3:
+					structure.add_player(player)
+					return
+
+		tile.meeple_attached = True
+
+		for structure in self.structures:
+			if (tile, direction) in structure.edges:
+				structure.add_player(self.current_player())
+				break
 
 
 	def check_valid_placement(self, x, y, tile):
@@ -366,17 +369,16 @@ class structures:
 		}
 
 		for direction, ((nr, nc), opposite_side, my_edge) in neighbors.items():
-			if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]):
+			if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]) or my_edge != self.type:
 				continue
 			neighbor = board[nr][nc]
 			
-			if neighbor is not None:
-				if getattr(neighbor, opposite_side) == my_edge:
-					if (neighbor, opposite_side) in self.edges:
-						self.edges.remove((neighbor, opposite_side)) #remove non open edges
+			if neighbor is not None and getattr(neighbor, opposite_side) == self.type:
+            # this edge is now closed — remove the neighbour's open edge too
+				if (neighbor, opposite_side) in self.edges:
+					self.edges.remove((neighbor, opposite_side))
 			else:
-				if my_edge == self.type:
-					self.edges.append((tile, direction)) #add open edges
+				self.edges.append((tile, direction)) #add open edges
 
 	def add_player(self, player):
 		"""
@@ -408,15 +410,12 @@ class structures:
 			if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]):
 				continue
 			neighbor = board[nr][nc]
-
 			if neighbor is None or my_edge != self.type or getattr(neighbor, opposite_side) != self.type:
 				continue
-
 			for tile1, row1, col1 in self.tiles_used:
 				if tile1 is neighbor and row1 == nr and col1 == nc:
 					connections.append(direction)
 					break
-
 		return connections
 
 	def score_structure(self):
@@ -425,6 +424,8 @@ class structures:
 		"""
 
 		if self.type == 3: #Monastary scoring
+			if len(self.players) == 0:
+				return
 			self.players[0].score += 9
 			return
 

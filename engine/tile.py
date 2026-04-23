@@ -30,7 +30,7 @@ class tile:
 		self.right = right
 		self.feature_continues = feature_continues
 		self.attribute = attribute
-		self.meeple_attached = (0, 0, 0, 0, 0)
+		self.meeple_attached = False
 
 	# For tile printing in testing
 	def __repr__(self):
