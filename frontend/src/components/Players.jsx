@@ -1,4 +1,4 @@
-const PLAYER_COLOURS = ["#BF616A", "#81A1C1", "#A3BE8C", "#EBCB8B", "#B48EAD"];
+import { PLAYER_COLOURS } from "../constants/config";
 
 export default function Players({ currentPlayer, players }) {
   return <div className="card card-players">

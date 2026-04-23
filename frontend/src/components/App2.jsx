@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { getGameState, startGame } from "../api/api";
-import useGameState from "../hooks/useGameState";
+import { POLLING_INTERVAL } from "../constants/config";
+import { useGameState } from "../hooks/useGameState";
 import "../css/App2.css";
 import EntryScreen from "./EntryScreen";
 import LoadingScreen from "./LoadingScreen";
@@ -39,7 +40,7 @@ export default function App2() {
   // start fetching on mount
   useEffect(() => {
     fetchState();
-    const interval = setInterval(fetchState, 2000);
+    const interval = setInterval(fetchState, POLLING_INTERVAL);
     return () => clearInterval(interval);
   }, []);
 
