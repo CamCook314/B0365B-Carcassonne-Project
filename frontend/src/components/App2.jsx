@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { getGameState, startGame } from "../api/api";
+import useGameState from "../hooks/useGameState";
 import "../css/App2.css";
 import EntryScreen from "./EntryScreen";
 import LoadingScreen from "./LoadingScreen";

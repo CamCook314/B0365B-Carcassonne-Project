@@ -1,4 +1,4 @@
-const PLAYER_COLORS = ["#BF616A", "#81A1C1", "#A3BE8C", "#EBCB8B", "#B48EAD"];
+const PLAYER_COLOURS = ["#BF616A", "#81A1C1", "#A3BE8C", "#EBCB8B", "#B48EAD"];
 
 export default function Players({ currentPlayer, players }) {
   return <div className="card card-players">
@@ -16,7 +16,7 @@ export default function Players({ currentPlayer, players }) {
         >
           <div
             className="player-avatar"
-            style={{ background: PLAYER_COLORS[i] || "#888" }}
+            style={{ background: PLAYER_COLOURS[i] || "#888" }}
           >
             {p.colour?.[0]?.toUpperCase() || i + 1}
           </div>
@@ -28,7 +28,7 @@ export default function Players({ currentPlayer, players }) {
           </div>
           <div
             className="player-score"
-            style={{ color: PLAYER_COLORS[i] || "#888" }}
+            style={{ color: PLAYER_COLOURS[i] || "#888" }}
           >
             {p.score}
           </div>
