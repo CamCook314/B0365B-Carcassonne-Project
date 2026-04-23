@@ -80,6 +80,30 @@ def _handle_cv_to_engine():
     Project_CV.cv_to_engine = False
 
 
+def _handle_meeple_placed():
+    colour    = Project_CV.meeple_colour
+    direction = Project_CV.meeple_direction
+    print(f"[bridge] meeple_placed — colour={colour}  direction={direction}")
+    resp = _post("/meeple", {"colour": colour, "direction": direction})
+    if resp and resp.get("status") == "ok":
+        print(f"[bridge] /meeple OK — turn={resp.get('turn')}  player={resp.get('current_player')}")
+    else:
+        print(f"[bridge] /meeple error: {resp}")
+    Project_CV.meeple_placed    = False
+    Project_CV.meeple_colour    = None
+    Project_CV.meeple_direction = None
+
+
+def _handle_meeple_skip():
+    print("[bridge] meeple_skip — calling /meeple/skip")
+    resp = _post("/meeple/skip", {})
+    if resp and resp.get("status") == "ok":
+        print(f"[bridge] /meeple/skip OK — turn={resp.get('turn')}  player={resp.get('current_player')}")
+    else:
+        print(f"[bridge] /meeple/skip error: {resp}")
+    Project_CV.meeple_skip = False
+
+
 # ── Thread targets ─────────────────────────────────────────────────────────────
 
 def _run_api():
@@ -126,6 +150,12 @@ def main():
 
                 if Project_CV.cv_to_engine:
                     _handle_cv_to_engine()
+
+                if Project_CV.meeple_placed:
+                    _handle_meeple_placed()
+
+                if Project_CV.meeple_skip:
+                    _handle_meeple_skip()
 
             except Exception as e:
                 print(f"[bridge] Poll error: {e}")
