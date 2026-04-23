@@ -165,8 +165,18 @@ class gameStateClass:
 	def current_player(self):
 		return self.players[self.currentIndex]
 
-	#Place meeple on tile and where on tile if it has multiple places
-	def place_meeple(self, tile, direction):
+	#Place meeple on tile and where on tile if it has multiple places, well as colour of meeple
+	def place_meeple(self, tile, direction, Colour):
+		for p in self.players:
+			if p.colour == Colour and p is not self.current_player():
+				raise ValueError(f"Colour '{Colour}' already taken by another player")
+
+		player = self.current_player()
+
+		if player.colour is None:
+			player.colour = Colour
+		elif player.colour != Colour:
+			raise ValueError(f"Player already assigned colour {player.return_colour()}")
 		if tile.meeple_attached == True:
 			raise ValueError("Meeple already placed on this tile")
 		
@@ -490,12 +500,13 @@ def printBoard(game):
 
 if __name__ == "__main__":
 	#Tests
-	p1 = player(0)
-	p2 = player(1)
+	p1 = player("red")
+	p2 = player("blue")
 
 	game = gameStateClass([p1, p2])
 
 	t1 = tile(1, 1, 0, 0, 1, 0)  # road vertical
+	
 	t3 = tile(1, 0, 0, 0, 0, 0) # tile up end
 	t4 = tile(0,1,0,0,0,0) #tile down end
 
@@ -503,6 +514,7 @@ if __name__ == "__main__":
 	
 	game.place_tile(3, 3, t1)
 	game.manage_structures(3, 3, t1)
+	game.place_meeple(t1, "up", "red")
 
 	print("Placed first tile")
 	printBoard(game)
