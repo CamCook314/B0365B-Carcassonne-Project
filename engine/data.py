@@ -1,46 +1,6 @@
-
 from tile_set import tile_set
-
+from tile import tile
 # Variable declarations
-
-class tile:
-
-	# Constructor for each tile object. up, down left and right
-	# are integers that represent what kind of connector type the
-	# side is. Integers are as follows:
-
-	# 0 = no connector (field)
-	# 1 = road
-	# 2 = city
-	# 3 = river
-
-	# feature_continues, whether features continue from side to side
-	# 0 = no
-	# 1 = yes
-
-	# the attribute integer represents any other special
-	# characteristics. Integers are as follows:
-
-	# 0 = none
-	# 1 = shield (for city tiles)
-	# 2 = monastery (for field tiles)
-
-	#Meeple_attatched is set to 0 unless a meeple is detected, then 1,
-	# The next 4 are up, down, left, right for which structure it is on, when it applies
-
-	def __init__(self, up, down, left, right, feature_continues, attribute):
-		self.up = up
-		self.down = down
-		self.left = left
-		self.right = right
-		self.feature_continues = feature_continues
-		self.attribute = attribute
-		self.meeple_attached = (0, 0, 0, 0, 0)
-
-	# For tile printing in testing
-	def __repr__(self):
-		return f"Tile(u={self.up} d={self.down} l={self.left} r={self.right})"
-
 
 class player:
 
@@ -103,6 +63,9 @@ class gameStateClass:
 			new_rows = [([None] * cols) for _ in range(10)]
 			self.board = new_rows + self.board
 			self.row_offset += 10
+			for structure in self.structures:
+				structure.tiles_used = [(t, r + 10, c) for t, r, c in structure.tiles_used]
+
 
 		# expand downward
 		if array_row >= rows:
@@ -114,6 +77,8 @@ class gameStateClass:
 			for r in self.board:
 				r[:0] = [None] * 10
 			self.col_offset += 10
+			for structure in self.structures:
+				structure.tiles_used = [(t, r, c + 10) for t, r, c in structure.tiles_used]
 
 		# expand right
 		if array_col >= cols:
@@ -188,9 +153,7 @@ class gameStateClass:
 		if tile.attribute == 2: #Monastary
 			#Monastary detected
 			temp_struct = structures(tile, new_row, new_col, 3)
-			if player is not None:
-				temp_struct.add_player(player)
-				self.structures.append(temp_struct)
+			self.structures.append(temp_struct)
 		for structure in self.structures:
 			if structure.check_completed(self.board):
 				structure.score_structure()
@@ -203,10 +166,10 @@ class gameStateClass:
 		return self.players[self.currentIndex]
 
 	#Place meeple on tile and where on tile if it has multiple places
-	def place_meeple(self, tile):
-		if tile.meeple_attached[0] == 1:
+	def place_meeple(self, tile, direction):
+		if tile.meeple_attached == True:
 			raise ValueError("Meeple already placed on this tile")
-
+		
 		player = self.current_player()
 		if player.meeples <= 0:
 			raise ValueError("No meeples left")
@@ -214,21 +177,20 @@ class gameStateClass:
 		#tile.meeple_attached = (1, up, down, left, right)
 		player.meeples -= 1
 
-		directs = [] # This is so directions can be checked in the structures edges
-		if tile.meeple_attached[1] == 1:
-			directs.append("up")
-		elif tile.meeple_attached[2] == 1:
-			directs.append("down")
-		elif tile.meeple_attached[3] == 1:
-			directs.append("left")
-		elif tile.meeple_attached[4] == 1:
-			directs.append("right")
 
-		for direction in directs:
+		if tile.attribute == 2:
+			tile.meeple_attached = True
 			for structure in self.structures:
-				if (tile, direction) in structure.edges:
-					structure.add_player(self.current_player())
-					break
+				if structure.type == 3:
+					structure.add_player(player)
+					return
+
+		tile.meeple_attached = True
+
+		for structure in self.structures:
+			if (tile, direction) in structure.edges:
+				structure.add_player(self.current_player())
+				break
 
 
 	def check_valid_placement(self, x, y, tile):
@@ -287,7 +249,7 @@ class gameStateClass:
 					players.score += temp_score
 			elif struct.type == 2:
 				for tiles in struct.tiles_used:
-					if tiles.attribute == 1:
+					if tiles[0].attribute == 1:
 						temp_score += 2
 					else:
 						temp_score += 1
@@ -330,7 +292,7 @@ class gameStateClass:
 			if rid not in tile_set:
 				continue
 			tile_obj = tile_set[rid]
-			valid = self.get_valid_placements(self, tile_obj)
+			valid = self.get_valid_placements(tile_obj)
 			for x, y in valid:
 				if (x, y) not in all_valid:
 					all_valid[(x, y)] = rid
@@ -407,17 +369,16 @@ class structures:
 		}
 
 		for direction, ((nr, nc), opposite_side, my_edge) in neighbors.items():
-			if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]):
+			if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]) or my_edge != self.type:
 				continue
 			neighbor = board[nr][nc]
 			
-			if neighbor is not None:
-				if getattr(neighbor, opposite_side) == my_edge:
-					if (neighbor, opposite_side) in self.edges:
-						self.edges.remove((neighbor, opposite_side)) #remove non open edges
+			if neighbor is not None and getattr(neighbor, opposite_side) == self.type:
+            # this edge is now closed — remove the neighbour's open edge too
+				if (neighbor, opposite_side) in self.edges:
+					self.edges.remove((neighbor, opposite_side))
 			else:
-				if my_edge == self.type:
-					self.edges.append((tile, direction)) #add open edges
+				self.edges.append((tile, direction)) #add open edges
 
 	def add_player(self, player):
 		"""
@@ -449,15 +410,12 @@ class structures:
 			if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]):
 				continue
 			neighbor = board[nr][nc]
-
 			if neighbor is None or my_edge != self.type or getattr(neighbor, opposite_side) != self.type:
 				continue
-
 			for tile1, row1, col1 in self.tiles_used:
 				if tile1 is neighbor and row1 == nr and col1 == nc:
 					connections.append(direction)
 					break
-
 		return connections
 
 	def score_structure(self):
@@ -466,6 +424,8 @@ class structures:
 		"""
 
 		if self.type == 3: #Monastary scoring
+			if len(self.players) == 0:
+				return
 			self.players[0].score += 9
 			return
 
@@ -498,7 +458,7 @@ class structures:
 				(row,   col - 1), (row,   col), (row,   col + 1),
 				(row + 1, col - 1), (row + 1, col), (row + 1, col + 1)]
 			for nr, nc in all_neighbors:
-				if board[nr][nc] is None:
+				if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]) or board[nr][nc] is None:
 					return False
 			return True
 
