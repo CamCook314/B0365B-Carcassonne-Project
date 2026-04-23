@@ -1,46 +1,6 @@
-
 from tile_set import tile_set
-
+from tile import tile
 # Variable declarations
-
-class tile:
-
-	# Constructor for each tile object. up, down left and right
-	# are integers that represent what kind of connector type the
-	# side is. Integers are as follows:
-
-	# 0 = no connector (field)
-	# 1 = road
-	# 2 = city
-	# 3 = river
-
-	# feature_continues, whether features continue from side to side
-	# 0 = no
-	# 1 = yes
-
-	# the attribute integer represents any other special
-	# characteristics. Integers are as follows:
-
-	# 0 = none
-	# 1 = shield (for city tiles)
-	# 2 = monastery (for field tiles)
-
-	#Meeple_attatched is set to 0 unless a meeple is detected, then 1,
-	# The next 4 are up, down, left, right for which structure it is on, when it applies
-
-	def __init__(self, up, down, left, right, feature_continues, attribute):
-		self.up = up
-		self.down = down
-		self.left = left
-		self.right = right
-		self.feature_continues = feature_continues
-		self.attribute = attribute
-		self.meeple_attached = (0, 0, 0, 0, 0)
-
-	# For tile printing in testing
-	def __repr__(self):
-		return f"Tile(u={self.up} d={self.down} l={self.left} r={self.right})"
-
 
 class player:
 
@@ -188,9 +148,8 @@ class gameStateClass:
 		if tile.attribute == 2: #Monastary
 			#Monastary detected
 			temp_struct = structures(tile, new_row, new_col, 3)
-			if player is not None:
-				temp_struct.add_player(player)
-				self.structures.append(temp_struct)
+			temp_struct.add_player(player)
+			self.structures.append(temp_struct)
 		for structure in self.structures:
 			if structure.check_completed(self.board):
 				structure.score_structure()
@@ -287,7 +246,7 @@ class gameStateClass:
 					players.score += temp_score
 			elif struct.type == 2:
 				for tiles in struct.tiles_used:
-					if tiles.attribute == 1:
+					if tiles[0].attribute == 1:
 						temp_score += 2
 					else:
 						temp_score += 1
@@ -330,7 +289,7 @@ class gameStateClass:
 			if rid not in tile_set:
 				continue
 			tile_obj = tile_set[rid]
-			valid = self.get_valid_placements(self, tile_obj)
+			valid = self.get_valid_placements(tile_obj)
 			for x, y in valid:
 				if (x, y) not in all_valid:
 					all_valid[(x, y)] = rid
@@ -498,7 +457,7 @@ class structures:
 				(row,   col - 1), (row,   col), (row,   col + 1),
 				(row + 1, col - 1), (row + 1, col), (row + 1, col + 1)]
 			for nr, nc in all_neighbors:
-				if board[nr][nc] is None:
+				if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]) or board[nr][nc] is None:
 					return False
 			return True
 

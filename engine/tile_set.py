@@ -1,4 +1,4 @@
-from data import tile
+from tile import tile
 
 # Dict of all tiles and their attributes
 # First four class attribute
