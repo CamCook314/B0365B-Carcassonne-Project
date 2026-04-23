@@ -111,44 +111,53 @@ class gameStateClass:
 		new_row, new_col = self.to_array_index(row, col)
 		connections = []	
 		for type in [1,2]: # to check for tiles with 2 structure types
-			
-			matching_structures = []
+			matching_edges = []
+			for dir, vdir in [("up", tile.up), ("down", tile.down), ("left", tile.left), ("right", tile.right)]:
+				if vdir == type:
+					matching_edges.append(dir) #gets all edges of the tile
+			if not matching_edges:
+				continue
 
-			for structure in self.structures:
-				if type != structure.type:
-					continue
-				connections = structure.check_structure_compatability(new_row, new_col, tile, self.board)
-				
-				if len(connections) > 0:
-					matching_structures.append((structure, connections))
-				print("len of matching structures is, " + str(len(matching_structures)))
-			if len(matching_structures) == 0:
-				if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1):
-					temp_struct = structures(tile, new_row, new_col, 1)
-					self.structures.append(temp_struct)
-				elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2):
-					temp_struct = structures(tile, new_row, new_col, 2)
-					self.structures.append(temp_struct)
-			elif len(matching_structures) == 1:
-				struct, _ = matching_structures[0]
-				struct.extend_structure(new_row, new_col, tile, self.board)
-			elif len(matching_structures) >= 2:
-				all_tiles = []
-				all_edges = []
-				all_players = []
-				for struct, _ in matching_structures:
-					all_tiles += struct.tiles_used
-					all_players += struct.players
-					all_edges += struct.edges
-					self.structures.remove(struct)
-				new_struct = structures(all_tiles[0][0], all_tiles[0][1], all_tiles[0][2], matching_structures[0][0].type)
-				new_struct.players = all_players
-				new_struct.tiles_used = all_tiles
-				
-				new_struct.edges = all_edges
-				new_struct.extend_structure(new_row, new_col, tile, self.board)
+			if tile.feature_continues == 1: # if the feature continues treat all edges as 1 structure else treat them all as seperate
+				edgegroup = [matching_edges]
+			else:
+				edgegroup = [[d] for d in matching_edges]
+			for group in edgegroup:
+				matching_structures = []
+				for structure in self.structures:
+					if structure.type != type:
+						continue
+					connections = structure.check_structure_compatability(new_row, new_col, tile, self.board)
+					group_connections = [c for c in connections if c in group]
+					if group_connections:
+						matching_structures.append((structure, group_connections))
+				if len(matching_structures) == 0:
+					if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1):
+						temp_struct = structures(tile, new_row, new_col, 1)
+						self.structures.append(temp_struct)
+					elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2):
+						temp_struct = structures(tile, new_row, new_col, 2)
+						self.structures.append(temp_struct)
+				elif len(matching_structures) == 1:
+					struct, _ = matching_structures[0]
+					struct.extend_structure(new_row, new_col, tile, self.board)
+				elif len(matching_structures) >= 2:
+					all_tiles = []
+					all_edges = []
+					all_players = []
+					for struct, _ in matching_structures:
+						all_tiles += struct.tiles_used
+						all_players += struct.players
+						all_edges += struct.edges
+						self.structures.remove(struct)
+					new_struct = structures(all_tiles[0][0], all_tiles[0][1], all_tiles[0][2], matching_structures[0][0].type)
+					new_struct.players = all_players
+					new_struct.tiles_used = all_tiles
+					
+					new_struct.edges = all_edges
+					new_struct.extend_structure(new_row, new_col, tile, self.board)
 
-				self.structures.append(new_struct)
+					self.structures.append(new_struct)
 
 		if tile.attribute == 2: #Monastary
 			#Monastary detected
@@ -505,8 +514,15 @@ if __name__ == "__main__":
 
 	game = gameStateClass([p1, p2])
 
-	t1 = tile(1, 1, 0, 0, 1, 0)  # road vertical
-	
+	t1 = tile(1, 1, 1, 0, 0, 0)  # road vertical
+
+	game.place_tile(3, 3, t1)
+	game.manage_structures(3, 3, t1)
+	game.place_meeple(t1, "up", "red")
+
+	printBoard(game)
+	print(game.structures)
+	"""
 	t3 = tile(1, 0, 0, 0, 0, 0) # tile up end
 	t4 = tile(0,1,0,0,0,0) #tile down end
 
@@ -572,3 +588,4 @@ if __name__ == "__main__":
 
 	print("Player 1 score is " + str(p1.score))
 	print("Player 2 score is " + str(p2.score))
+	"""
