@@ -13,6 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cv import image_match
 from cv.blob_pipeline import process_frame, mask_centroid, find_contours, classify_contours
 from cv.grid_tracker import GridTracker
+from cv.meeple_detector import detect_meeple
 import time
 
 # --- Communication globals ---
@@ -25,6 +26,13 @@ grid_checked      = False        # True once placement coordinates are ready
 grid_coord        = None         # (gx, gy) tuple in CV coordinate space
 cv_to_engine      = False        # Raised when CV has a placement ready for the engine
 game_response     = (False, 1)   # (responded_bool, result_int); 1 = valid, 0 = invalid
+grid_origin       = None         # (x, y) pixel centre of tile (0,0) in proc coords (1920×1080)
+grid_tile_size    = None         # Pixel distance between adjacent tile centres in proc coords
+grid_angle        = None         # Board rotation angle in degrees
+meeple_placed     = False        # CV sets when meeple detected; bridge clears after POST /meeple
+meeple_colour     = None         # "red","blue","green","yellow","black"
+meeple_direction  = None         # "up","down","left","right","centre"
+meeple_skip       = False        # CV sets on timeout/skip; bridge clears after POST /meeple/skip
 
 
 def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
@@ -168,7 +176,18 @@ def cv_main_loop():
     # --- Phase constants ---
     IDENTIFY        = "identify"        # Waiting to see and save the next unplaced tile
     WAIT_PLACEMENT  = "wait_placement"  # Tile saved — watching for it to land on the board
+    WAIT_MEEPLE     = "wait_meeple"     # Tile placed — watching for meeple or skip
     INVALID_DISPLAY = "invalid_display" # Engine rejected — show warning, wait for removal
+
+    # --- Meeple detection ---
+    MEEPLE_CONFIRM_FRAMES = 3    # Consecutive frames with meeple to commit
+    MEEPLE_SKIP_FRAMES    = 3    # Consecutive frames with a new unplaced tile to skip
+    MEEPLE_SAFETY_FRAMES  = 60   # Hard safety timeout (~60s) in case neither fires
+
+    meeple_frame_count   = 0
+    meeple_detect_count  = 0
+    meeple_skip_count    = 0
+    candidate_meeple_dir = None
 
     # --- Board growth / removal detection ---
     BOARD_GROWTH_THRESHOLD = 1000   # Min pixel area increase to count as growth
@@ -219,7 +238,7 @@ def cv_main_loop():
     # the growth counter, so one flickering frame doesn't undo 2+ growth frames.
     non_growth_count = 0
 
-    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response
+    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, grid_origin, grid_tile_size, grid_angle
 
     print("Place the first tile then click any OpenCV window and press 'b'.")
 
@@ -276,6 +295,9 @@ def cv_main_loop():
                 (_, _), (rw_f, rh_f), _ = rect_f
                 grid_tracker.a  = float(max(rw_f, rh_f))
                 grid_tracker.b  = 0.0
+                grid_origin    = tuple(grid_tracker.origin_px)
+                grid_tile_size = grid_tracker.tile_size_px
+                grid_angle     = 0.0
                 print(f"Board origin set at pixel ({origin[0]:.0f}, {origin[1]:.0f})"
                       f"  tile_size={grid_tracker.a:.0f}px  — identifying first tile.")
 
@@ -286,12 +308,13 @@ def cv_main_loop():
                 print(f"Saved origin tile: {path}")
                 save_count += 1
 
-                results         = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
-                tile_id         = results[0][1]   # bare ID string, e.g. "ID43"
-                tile_candidates = [(s, rid) for s, rid in results]
-                tile_checked    = True
-                grid_coord      = (0, 0)
-                grid_checked    = True
+                results           = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
+                tile_id           = results[0][1]   # bare ID string, e.g. "ID43"
+                tile_candidates   = [(s, rid) for s, rid in results]
+                tile_checked      = True
+                grid_coord        = (0, 0)
+                grid_checked      = True
+                last_placed_coord = (0, 0)   # needed so WAIT_MEEPLE can crop the origin slot
                 print("Origin tile identified — communicating (0, 0).")
                 for score, rid in results[:3]:
                     print(f"  {score:.4f}  {rid}")
@@ -497,8 +520,11 @@ def cv_main_loop():
                                 prev_board_area = cv.countNonZero(stable_board_mask)
                                 prev_sat_area   = cv.countNonZero(
                                     cv.bitwise_and(sat_blobs, stable_board_mask))
-                                tile_saved = False
-                                phase      = IDENTIFY
+                                tile_saved           = False
+                                phase                = WAIT_MEEPLE
+                                meeple_frame_count   = 0
+                                meeple_detect_count  = 0
+                                candidate_meeple_dir = None
 
                                 # Compute the actual observed tile centroid from saturation
                                 # pixels — more accurate than the grid-predicted slot centre,
@@ -516,6 +542,9 @@ def cv_main_loop():
                                       f"use=({use_cx:.0f},{use_cy:.0f})"
                                       f"  slot_px={slot_px}  tile_size_px={grid_tracker.tile_size_px:.1f}")
                                 grid_tracker.confirm_placement(best_slot, use_cx, use_cy)
+                                grid_origin    = tuple(grid_tracker.origin_px)
+                                grid_tile_size = grid_tracker.tile_size_px
+                                grid_angle     = float(np.degrees(np.arctan2(grid_tracker.b, grid_tracker.a)))
                                 last_placed_coord = best_slot
                                 print(f"Tile placed at grid {best_slot} — ready for next tile.")
 
@@ -562,7 +591,61 @@ def cv_main_loop():
                             # One non-growth frame: keep the counter (tile may be wobbling
                             # at the threshold) and wait for the next frame.
 
-            # ── Phase 3: invalid placement — wait for tile removal ────────────
+            # ── Phase 3: wait for meeple or player skip ───────────────────────
+            elif phase == WAIT_MEEPLE:
+                meeple_frame_count += 1
+                cv.putText(result, "Waiting for meeple...",
+                           (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
+
+                slot_px = grid_tracker.grid_to_px(*last_placed_coord)
+                colour, direction = detect_meeple(proc_frame, slot_px, grid_tracker.tile_size_px)
+
+                if colour is not None:
+                    # Meeple visible — require N stable consecutive frames
+                    if direction == candidate_meeple_dir:
+                        meeple_detect_count += 1
+                    else:
+                        candidate_meeple_dir = direction
+                        meeple_detect_count  = 1
+                    meeple_skip_count = 0   # reset skip counter while meeple present
+                    print(f"  [meeple] colour={colour}  dir={direction}  "
+                          f"stable={meeple_detect_count}/{MEEPLE_CONFIRM_FRAMES}")
+                    if meeple_detect_count >= MEEPLE_CONFIRM_FRAMES:
+                        print(f"Meeple confirmed: {colour} at {direction}.")
+                        meeple_colour    = colour
+                        meeple_direction = direction
+                        meeple_placed    = True
+                else:
+                    meeple_detect_count  = 0
+                    candidate_meeple_dir = None
+                    # New tile stably visible → player skipped meeple
+                    if unplaced:
+                        meeple_skip_count += 1
+                        if meeple_skip_count >= MEEPLE_SKIP_FRAMES:
+                            print("Unplaced tile detected — skipping meeple.")
+                            meeple_skip = True
+                    else:
+                        meeple_skip_count = 0
+
+                # Safety timeout so the phase never hangs permanently
+                if not meeple_placed and not meeple_skip and meeple_frame_count >= MEEPLE_SAFETY_FRAMES:
+                    print("Meeple safety timeout — skipping.")
+                    meeple_skip = True
+
+                # Wait for bridge/interface to clear the flag, then move to IDENTIFY
+                if meeple_placed or meeple_skip:
+                    while meeple_placed or meeple_skip:
+                        time.sleep(0.05)
+                    phase                = IDENTIFY
+                    meeple_frame_count   = 0
+                    meeple_detect_count  = 0
+                    meeple_skip_count    = 0
+                    candidate_meeple_dir = None
+                    meeple_colour        = None
+                    meeple_direction     = None
+                    print("Meeple phase done — ready for next tile.")
+
+            # ── Phase 4: invalid placement — wait for tile removal ────────────
             elif phase == INVALID_DISPLAY:
                 cv.putText(result, "INVALID — REMOVE TILE AND REPOSITION", (10, 60),
                            cv.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 255), 2)
@@ -620,8 +703,13 @@ def cv_main_loop():
             grid_coord = None
 
             if is_valid:
-                tile_id = None
-                print("Placement accepted.")
+                tile_id              = None
+                phase                = WAIT_MEEPLE
+                meeple_frame_count   = 0
+                meeple_detect_count  = 0
+                meeple_skip_count    = 0
+                candidate_meeple_dir = None
+                print("Placement accepted — entering WAIT_MEEPLE.")
             else:
                 grid_tracker.restore()
                 prev_board_area = rollback_prev_board_area

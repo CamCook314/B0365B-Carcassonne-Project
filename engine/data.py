@@ -95,7 +95,7 @@ class gameStateClass:
 		self.remaining_pieces -= 1
 
 	#player is None if no meeple added
-	def manage_structures(self, row, col, tile):
+	def manage_structures(self, row, col, tile, player=None):
 		"""
 		Manages structures for the game, creating new ones, extending them, merging, and scoring
 		once complete

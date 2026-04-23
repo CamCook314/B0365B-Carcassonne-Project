@@ -6,10 +6,14 @@ from tile import tile
 	# 1 = road
 	# 2 = city
 	# 3 = river
+# Fifth class attribute
+    # 0 = Feature disconnected
+    # 1 = Feature connected
 # Last class attribute
-	# 0 = none
+    # 0 = none
 	# 1 = shield (for city tiles)
 	# 2 = monastery (for field tiles)
+    
 tile_set = {
     "ID0": tile(0, 0, 0, 3, 0, 0),
     "ID1": tile(3, 0, 0, 0, 0, 0),

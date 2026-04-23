@@ -14,6 +14,7 @@ empty_bag_instance = None
 pending_tile = None
 pending_valid = []           # list of [x, y, rotation_id]
 pending_candidates = []      # ranked list of tile_id strings from CV top-N matches
+pending_placement = None     # {"x", "y", "tile_id", "tile"} — set by /place, cleared by /meeple or /meeple/skip
 
 
 @app.route('/gamestate', methods=['GET'])
@@ -158,7 +159,7 @@ def clear_pending():
 
 @app.route('/place', methods=['POST'])
 def place_tile():
-    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates
+    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement
 
     if game_state is None:
         return jsonify({"error": "Game not started"}), 400
@@ -187,34 +188,105 @@ def place_tile():
     if placed_tile_id is None:
         return jsonify({"error": "Invalid placement"}), 400
 
-    # Engine places tile, bag removes all 4 rotations
-    game_state.place_tile(x, y, tile_set[placed_tile_id])
+    tile_obj = tile_set[placed_tile_id]
+    game_state.place_tile(x, y, tile_obj)
     tile_bag_instance.remove_tile(placed_tile_id)
 
     pending_tile = None
     pending_valid = []
     pending_candidates = []
-
-    game_state.next_player()
-    game_state.current_turn += 1
+    # Store placement so /meeple or /meeple/skip can finish the turn
+    pending_placement = {"x": x, "y": y, "tile_id": placed_tile_id, "tile": tile_obj}
 
     return jsonify({
         "status": "ok",
         "placed": placed_tile_id,
         "position": [x, y],
+    }), 200
+
+
+@app.route('/meeple', methods=['POST'])
+def place_meeple():
+    global game_state, pending_placement
+
+    if game_state is None:
+        return jsonify({"error": "Game not started"}), 400
+    if pending_placement is None:
+        return jsonify({"error": "No pending placement"}), 400
+
+    data = request.get_json()
+    direction = data.get("direction")  # "up", "down", "left", "right", "centre"
+    colour    = data.get("colour")     # "red", "blue", "green", "yellow", "black"
+    if direction not in ("up", "down", "left", "right", "centre"):
+        return jsonify({"error": f"Invalid direction: {direction}"}), 400
+
+    x    = pending_placement["x"]
+    y    = pending_placement["y"]
+    tile = pending_placement["tile"]
+
+    dir_to_attached = {
+        "up":     (1, 1, 0, 0, 0),
+        "down":   (1, 0, 1, 0, 0),
+        "left":   (1, 0, 0, 1, 0),
+        "right":  (1, 0, 0, 0, 1),
+        "centre": (1, 0, 0, 0, 0),
+    }
+    tile.meeple_attached = dir_to_attached[direction]
+
+    # Monastery: manage_structures handles player attachment at creation time
+    if direction == "centre" and tile.attribute == 2:
+        game_state.manage_structures(x, y, tile, game_state.current_player())
+    else:
+        game_state.manage_structures(x, y, tile, None)
+        game_state.place_meeple(tile)
+
+    game_state.next_player()
+    game_state.current_turn += 1
+    pending_placement = None
+
+    return jsonify({
+        "status": "ok",
+        "meeple_colour": colour,
+        "meeple_direction": direction,
         "turn": game_state.current_turn,
         "current_player": game_state.currentIndex,
-    }), 200
+    })
+
+
+@app.route('/meeple/skip', methods=['POST'])
+def skip_meeple():
+    global game_state, pending_placement
+
+    if game_state is None:
+        return jsonify({"error": "Game not started"}), 400
+    if pending_placement is None:
+        return jsonify({"error": "No pending placement"}), 400
+
+    x    = pending_placement["x"]
+    y    = pending_placement["y"]
+    tile = pending_placement["tile"]
+
+    game_state.manage_structures(x, y, tile, None)
+    game_state.next_player()
+    game_state.current_turn += 1
+    pending_placement = None
+
+    return jsonify({
+        "status": "ok",
+        "turn": game_state.current_turn,
+        "current_player": game_state.currentIndex,
+    })
 
 
 @app.route('/reset', methods=['POST'])
 def reset_game():
-    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates
+    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement
     game_state = None
     tile_bag_instance = None
     pending_tile = None
     pending_valid = []
     pending_candidates = []
+    pending_placement = None
     return jsonify({"status": "ok"})
 
 

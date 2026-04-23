@@ -106,6 +106,15 @@ def run() -> None:
             print(f"[Engine → CV]  {'VALID' if valid else 'INVALID'}")
             Project_CV.game_response = (True, result)
 
+        if Project_CV.meeple_placed:
+            print(f"[Meeple]  direction={Project_CV.meeple_direction}  (acknowledged)")
+            Project_CV.meeple_placed    = False
+            Project_CV.meeple_direction = None
+
+        if Project_CV.meeple_skip:
+            print("[Meeple]  skipped  (acknowledged)")
+            Project_CV.meeple_skip = False
+
         time.sleep(0.1)    # 100 ms poll keeps this thread responsive without burning CPU
 
 
