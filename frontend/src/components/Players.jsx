@@ -1,4 +1,6 @@
-function Players({ currentPlayer, players }) {
+const PLAYER_COLORS = ["#BF616A", "#81A1C1", "#A3BE8C", "#EBCB8B", "#B48EAD"];
+
+export default function Players({ currentPlayer, players }) {
   return <div className="card card-players">
     <div className="card-header">
       <span>Players</span>

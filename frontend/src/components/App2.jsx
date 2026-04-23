@@ -1,13 +1,10 @@
 import { useState, useEffect } from "react";
 import { getGameState, startGame } from "../api/api";
-import GameBoard from "./Gameboard";
 import "../css/App2.css";
 import EntryScreen from "./EntryScreen";
 import LoadingScreen from "./LoadingScreen";
 import Grid from "./Grid";
 import Header from "./Header";
-
-const PLAYER_COLORS = ["#BF616A", "#81A1C1", "#A3BE8C", "#EBCB8B", "#B48EAD"];
 
 export default function App2() {
   const [gameState, setGameState] = useState(null);

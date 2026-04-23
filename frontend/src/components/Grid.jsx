@@ -1,3 +1,6 @@
+import GameBoard from "./GameBoard";
+import Players from "./Players";
+
 export default function Grid({ currentPlayer, players, boardTiles, validPlacements, remaining, currentTurn, pendingTile }) {
   return <div className="grid">
     <div className="col">
