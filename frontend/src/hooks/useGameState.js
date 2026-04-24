@@ -6,6 +6,7 @@ export function useGameState() {
   const [gameState, setGameState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
 
 
   const fetchState = async () => {

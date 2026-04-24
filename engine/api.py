@@ -139,6 +139,7 @@ def set_pending_list():
         return jsonify({"error": err}), 400
     return jsonify(result)
 
+
 @app.route('/pending/override', methods=['POST'])
 def override_pending():
     """Website calls this when the user selects a different tile than the CV detected.
@@ -165,6 +166,23 @@ def override_pending():
 
     if Project_CV is not None:
         Project_CV.tile_id_override = tile_id
+
+    return jsonify(result)
+
+@app.route('/pending/change', methods=['POST'])
+def change_pending():
+    """
+    Change the pending tile based on an id received from the frontend.
+    """
+    data = request.get_json()
+    selected_tile = data.get("selected_tile")
+
+    print(f"received tile: {selected_tile}")
+
+    success, result = _resolve_pending(selected_tile)
+
+    if not success:
+        return jsonify({"error": result}), 400
 
     return jsonify(result)
 
