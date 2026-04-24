@@ -1,30 +1,9 @@
-"""
-Carcassonne Game API
-
-This module provides a REST API for the Carcassonne board game engine.
-It handles game state management, tile placement validation, and integration
-with computer vision for real-time gameplay.
-
-Endpoints:
-- GET /gamestate: Retrieve current game state
-- POST /start: Start a new game
-- POST /pending: Set a pending tile for placement
-- POST /pending/change: Change the pending tile
-- POST /pending/list: Sets the list of most similar tiles from cv
-- POST /pending/clear: Clear pending tile
-- POST /place: Place a tile on the board
-- POST /reset: Reset the game
-
-Global State:
-- game_state: Current game state object
-- tile_bag_instance: Tile bag for drawing tiles
-- pending_tile: Tile currently detected by CV
-- pending_tile_list: List of most similar tiles detected by CV
-- pending_valid: List of valid placements for pending tile
-"""
-
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+
+import os, sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from tile_set import tile_set
 import tile_bag
 from OldMain import (initialiseBoard, get_valid_placements_all_rotations, STARTING_RIVER)
@@ -33,23 +12,17 @@ app = Flask(__name__)
 app.json.sort_keys = False
 CORS(app)
 
-# Global game state variables
-game_state = None  # Current game state object
-tile_bag_instance = None  # Tile bag instance
-pending_tile = None  # Tile ID detected by CV (e.g., "ID40")
-pending_valid = []  # List of [x, y, rotation_id] for valid placements
-pending_tile_list = [] # List of most similar tiles detected by CV
+game_state = None
+tile_bag_instance = None
+empty_bag_instance = None
+pending_tile = None
+pending_valid = []           # list of [x, y, rotation_id]
+pending_candidates = []      # ranked list of tile_id strings from CV top-N matches
+pending_placement = None     # {"x", "y", "tile_id", "tile"} — set by /place, cleared by /meeple or /meeple/skip
 
 
 @app.route('/gamestate', methods=['GET'])
 def get_gamestate():
-    """
-    Retrieve the current game state.
-
-    Returns:
-        JSON: Game state including board, players, current turn, pending tile, etc.
-        Error 503: If no game is started.
-    """
     if game_state is None:
         return jsonify({"error": "Game not started"}), 503
 
@@ -88,16 +61,6 @@ def get_gamestate():
 
 @app.route('/start', methods=['POST'])
 def start_game():
-    """
-    Start a new game.
-
-    Request Body:
-        JSON: {"players": int} (2-5 players)
-
-    Returns:
-        JSON: {"status": "ok", "players": int}
-        Error 400: Invalid player count or game already started.
-    """
     global game_state, tile_bag_instance, pending_tile, pending_valid
 
     if game_state is not None:
@@ -121,20 +84,34 @@ def start_game():
     return jsonify({"status": "ok", "players": num_players}), 201
 
 
-def _validate_and_set_pending(tile_id):
-    """
-    Helper function to validate a tile and set pending tile and valid placements.
+def _resolve_pending(tile_id):
+    """Shared logic: resolve tile_id → base_num, compute valid placements, update globals.
+    Returns (response_dict, error_str). On success error_str is None."""
+    global pending_tile, pending_valid, pending_candidates
 
-    Args:
-        tile_id: int or str (base tile number, e.g., 10 for ID40-ID43)
+    if isinstance(tile_id, int):
+        base_num = tile_id
+    else:
+        base_num = int(tile_id.replace("ID", "")) // 4
 
-    Returns:
-        tuple: (success: bool, result: dict or error_msg: str)
-    """
-    global pending_tile, pending_valid
+    all_valid = get_valid_placements_all_rotations(game_state, base_num)
+    if not all_valid:
+        return None, "No valid placements for this tile"
+
+    pending_tile = f"ID{base_num * 4}"
+    pending_valid = [[x, y, rid] for (x, y), rid in all_valid.items()]
+    return {"tile_id": pending_tile, "valid_positions": pending_valid}, None
+
+
+@app.route('/pending', methods=['POST'])
+def set_pending():
+    global pending_candidates
 
     if game_state is None:
-        return False, "Game not started"
+        return jsonify({"error": "Game not started"}), 400
+
+    data = request.get_json()
+    tile_id = data.get("tile_id")
 
     # Optional ranked candidate list from CV: list of tile_id strings in rank order
     pending_candidates = data.get("candidates", [])
@@ -144,8 +121,6 @@ def _validate_and_set_pending(tile_id):
         return jsonify({"error": err}), 400
     return jsonify(result)
 
-    if not all_valid:
-        return False, "No valid placements for this tile"
 
 @app.route('/pending/override', methods=['POST'])
 def override_pending():
@@ -159,100 +134,36 @@ def override_pending():
     except ImportError:
         Project_CV = None
 
-    return True, {
-        "tile_id": pending_tile,
-        "valid_positions": pending_valid,
-    }
+    if game_state is None:
+        return jsonify({"error": "Game not started"}), 400
 
-
-@app.route('/pending', methods=['POST'])
-def set_pending():
-    """
-    Set a pending tile detected by CV for placement validation.
-
-    Request Body:
-        JSON: {"tile_id": int or str} (base tile number, e.g., 10 for ID40-ID43)
-
-    Returns:
-        JSON: {"tile_id": str, "valid_positions": [[x, y, rotation_id], ...]}
-        Error 400: Game not started or no valid placements.
-    """
     data = request.get_json()
     tile_id = data.get("tile_id")
+    if not tile_id:
+        return jsonify({"error": "Missing tile_id"}), 400
 
-    success, result = _validate_and_set_pending(tile_id)
+    result, err = _resolve_pending(tile_id)
+    if err:
+        return jsonify({"error": err}), 400
 
-    if not success:
-        return jsonify({"error": result}), 400
-
-    return jsonify(result)
-
-@app.route('/pending/change', methods=['POST'])
-def change_pending():
-    """
-    Change the pending tile based on an id received from the frontend.
-    Validates and sets the pending tile similar to set_pending().
-    """
-    data = request.get_json()
-    selected_tile = data.get("selected_tile")
-
-    print(f"received tile: {selected_tile}")
-
-    success, result = _validate_and_set_pending(selected_tile)
-
-    if not success:
-        return jsonify({"error": result}), 400
+    if Project_CV is not None:
+        Project_CV.tile_id_override = tile_id
 
     return jsonify(result)
 
-@app.route('/pending/list', methods=['POST'])
-def set_pending_list():
-    """
-    Sets the list of pending tiles to the top 4 tiles detected by the cv
-    >> Allow the user to select one of these in the frontend to change the active tile
-    """
-    data = request.get_json()
-    tile_ids = data.get("tile_ids")
-
-    if not tile_ids or not isinstance(tile_ids, list):
-        return jsonify({"error": "Missing or invalid 'tile_ids' field"}), 400
-
-    # set the first tile in the list as the pending tile and return valid placements
-    success, result = _validate_and_set_pending(tile_ids[0])
-
-    if not success:
-        return jsonify({"error": result}), 400
-
-    return jsonify(result)
 
 @app.route('/pending/clear', methods=['POST'])
 def clear_pending():
-    """
-    Clear the pending tile and valid placements.
-
-    Returns:
-        JSON: {"status": "ok"}
-    """
-    global pending_tile, pending_valid, pending_tile_list
+    global pending_tile, pending_valid, pending_candidates
     pending_tile = None
     pending_valid = []
-    pending_tile_list = []
+    pending_candidates = []
     return jsonify({"status": "ok"})
 
 
 @app.route('/place', methods=['POST'])
 def place_tile():
-    """
-    Place a tile on the board at the specified position.
-
-    Request Body:
-        JSON: {"x": int, "y": int, "tile_id": int or str (optional, uses pending if not provided)}
-
-    Returns:
-        JSON: {"status": "ok", "placed": str, "position": [x, y], "turn": int, "current_player": int}
-        Error 400: Invalid placement or game not started.
-    """
-    global game_state, tile_bag_instance, pending_tile, pending_valid
+    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement
 
     if game_state is None:
         return jsonify({"error": "Game not started"}), 400
@@ -373,13 +284,7 @@ def skip_meeple():
 
 @app.route('/reset', methods=['POST'])
 def reset_game():
-    """
-    Reset the game state, clearing all data.
-
-    Returns:
-        JSON: {"status": "ok"}
-    """
-    global game_state, tile_bag_instance, pending_tile, pending_valid
+    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement
     game_state = None
     tile_bag_instance = None
     pending_tile = None
@@ -390,10 +295,7 @@ def reset_game():
 
 
 if __name__ == "__main__":
-    """
-    Run the Flask development server.
-
-    Starts the API on http://127.0.0.1:1234 with debug mode enabled.
-    """
+    # Run api.py directly (without CV or frontend) for engine-only testing.
+    # For the full system, run engine/bridge.py instead.
     print("API running on http://127.0.0.1:1234")
     app.run(host="127.0.0.1", port=1234, debug=True, use_reloader=False)
