@@ -121,6 +121,23 @@ def set_pending():
         return jsonify({"error": err}), 400
     return jsonify(result)
 
+@app.route('/pending/list', methods=['POST'])
+def set_pending_list():
+    """
+    Sets the list of pending tiles to the top 4 tiles detected by the cv
+    >> Allow the user to select one of these in the frontend to change the active tile
+    """
+    data = request.get_json()
+    tile_ids = data.get("tile_ids")
+
+    if not tile_ids or not isinstance(tile_ids, list):
+        return jsonify({"error": "Missing or invalid 'tile_ids' field"}), 400
+
+    # set the first tile in the list as the pending tile
+    result, err = _resolve_pending(tile_ids[0])
+    if err:
+        return jsonify({"error": err}), 400
+    return jsonify(result)
 
 @app.route('/pending/override', methods=['POST'])
 def override_pending():
