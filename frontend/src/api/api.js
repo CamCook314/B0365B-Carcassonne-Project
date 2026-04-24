@@ -22,3 +22,29 @@ export async function startGame(numPlayers) {
   return res.json();
 }
 
+export async function setPendingTile(tileId) {
+  const res = await fetch(`${BASE_URL}/pending/change`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ selected_tile: tileId }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to set pending tile");
+  }
+  return res.json();
+}
+
+
+export async function setPendingTileList(tileIds) {
+  const res = await fetch(`${BASE_URL}/pending/list`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tile_ids: tileIds }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to fetch tile list");
+  }
+  return res.json();
+}

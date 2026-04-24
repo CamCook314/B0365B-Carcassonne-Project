@@ -64,9 +64,9 @@ def run():
         print(f"\n--- Turn {turn} | {colour}'s turn ---")
         print(f"Tiles on board: {len(state['board'])} | Remaining: {state['remaining_pieces']}")
 
-        # Enter tile 
+        # Enter tiles 
         while True:
-            tile_input = input("\nEnter base tile number (or 'quit'): ").strip()
+            tile_input = input("\nEnter base tile numbers (or 'quit'): ").strip()
 
             if tile_input.lower() == "quit":
                 print("Ending session.")
@@ -74,13 +74,17 @@ def run():
                 return
 
             try:
-                tile_num = int(tile_input)
+                tile_nums = [int(x.strip()) for x in tile_input.split(",")]
             except ValueError:
                 print("  Enter a number (base tile ID)")
                 continue
 
             # Tell the API which tile was detected 
-            ok, data = api_post("/pending", json={"tile_id": tile_num})
+            # ok, data = api_post("/pending", json={"tile_id": tile_num})
+
+            # Send list of most similar tiles to API
+            ok, data = api_post("/pending/list", json={"tile_ids": tile_nums})
+            tile_num = tile_nums[0]
             if not ok:
                 print(f"  Error: {data.get('error', 'Unknown error')}")
                 continue
