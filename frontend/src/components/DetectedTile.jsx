@@ -61,24 +61,31 @@ function CardBody({ pendingTile, validPlacements, pendingTileList }) {
 
 function TileCandidates({ pendingTileList }) {
     const [pendingInput, setPendingInput] = useState(0);
+    
     return (
         <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "center" }}>
-            <input
-                type="number"
-                min="0"
-                value={pendingInput}
-        onChange={(e) => setPendingInput(e.target.value)}
-        style={{ width: 80, padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc" }}
-      />
-      <button
-        onClick={() => setPendingTile(Number(pendingInput))}
-        style={{
-          padding: "8px 8px",
-          background: "var(--accent)",
-          color: "var(--bg)",
-        }}
-      >
-        {pendingTileList?.length > 0 ? pendingTileList[0] : "none"}
-      </button> 
+            { /* iterate through ids for each button */ }
+            {pendingTileList.map((tileId, index) => (
+                <button
+                key={index}
+                onClick={() => setPendingTile(Number(tileId))}
+                style={{
+                padding: "1px 1px",
+                background: "none",
+                color: "var(--bg)",
+                width: 50,
+                height: 50
+                }}>
+                <img
+                    src={`/tiles/ID${tileId*4}.jpg`}
+                    alt={`ID${tileId*4}.jpg`}
+                    style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                    }}
+                />
+        </button> 
+      ))}
     </div>
 )}
