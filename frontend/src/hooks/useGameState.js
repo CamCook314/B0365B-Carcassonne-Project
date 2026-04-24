@@ -1,23 +1,25 @@
 import { useState, useCallback, useEffect } from 'react';
 import { getGameState } from '../api/api.js';
+import { POLLING_INTERVAL } from '../constants/config.js';
 
 export function useGameState() {
-  const [gameData, setGameData] = useState(null);
+  const [gameState, setGameState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchState = useCallback(async () => {
+
+  const fetchState = async () => {
     try {
       const data = await getGameState();
-      setGameData(data);
+      setGameState(data);
       setError(null);
     } catch (err) {
       setError(err.message);
-      setGameData(null);
+      setGameState(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     fetchState();
@@ -25,5 +27,5 @@ export function useGameState() {
     return () => clearInterval(interval);
   }, [fetchState]);
 
-  return { gameData, loading, error, retry: fetchState };
+  return { gameState, loading, error, retry: fetchState };
 }

@@ -9,23 +9,7 @@ import Grid from "./Grid";
 import Header from "./Header";
 
 export default function App2() {
-  const [gameState, setGameState] = useState(null);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch game state from API
-  const fetchState = async () => {
-    try {
-      const data = await getGameState();
-      setGameState(data);
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-      setGameState(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { gameState, loading, error, retry: fetchState } = useGameState();
 
   // start a new game
   const handleStart = async (numPlayers) => {
@@ -36,13 +20,6 @@ export default function App2() {
       setError(err.message);
     }
   };
-
-  // start fetching on mount
-  useEffect(() => {
-    fetchState();
-    const interval = setInterval(fetchState, POLLING_INTERVAL);
-    return () => clearInterval(interval);
-  }, []);
 
   // convert API board data to array for GameBoard
   const boardTiles = gameState
