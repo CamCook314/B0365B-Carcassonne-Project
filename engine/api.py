@@ -127,11 +127,15 @@ def set_pending_list():
     Sets the list of pending tiles to the top 4 tiles detected by the cv
     >> Allow the user to select one of these in the frontend to change the active tile
     """
+    global pending_candidates
+
     data = request.get_json()
     tile_ids = data.get("tile_ids")
 
     if not tile_ids or not isinstance(tile_ids, list):
         return jsonify({"error": "Missing or invalid 'tile_ids' field"}), 400
+
+    pending_candidates = tile_ids[:4] # top 4
 
     # set the first tile in the list as the pending tile
     result, err = _resolve_pending(tile_ids[0])

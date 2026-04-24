@@ -43,6 +43,7 @@ export default function App2() {
   // Pending tile from CV (via API)
   const pendingTile = gameState?.pending_tile || null;
   const validPlacements = gameState?.pending_valid || [];
+  const pendingTileList = gameState?.pending_candidates || [];
 
   // entry screens for picking player numbers for api
   if (!loading && !gameState) {
@@ -68,6 +69,7 @@ export default function App2() {
         remaining={remaining}
         currentTurn={currentTurn}
         pendingTile={pendingTile}
+        pendingTileList={pendingTileList}
       />
     </div>
   );

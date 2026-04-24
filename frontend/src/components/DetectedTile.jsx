@@ -78,7 +78,7 @@ function TileCandidates({ pendingTileList }) {
           color: "var(--bg)",
         }}
       >
-        {pendingTileList ? pendingTileList[0] : "none"}
+        {pendingTileList?.length > 0 ? pendingTileList[0] : "none"}
       </button> 
     </div>
 )}
