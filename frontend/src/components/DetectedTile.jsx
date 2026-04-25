@@ -60,6 +60,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList }) {
 }
 
 function TileCandidates({ pendingTileList }) {
+    // unused?
     const [pendingInput, setPendingInput] = useState(0);
     
     return (
