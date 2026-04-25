@@ -1,5 +1,9 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+
+import os, sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from tile_set import tile_set
 import tile_bag
 from OldMain import (initialiseBoard, get_valid_placements_all_rotations, STARTING_RIVER)
@@ -117,6 +121,28 @@ def set_pending():
         return jsonify({"error": err}), 400
     return jsonify(result)
 
+@app.route('/pending/list', methods=['POST'])
+def set_pending_list():
+    """
+    Sets the list of pending tiles to the top 4 tiles detected by the cv
+    >> Allow the user to select one of these in the frontend to change the active tile
+    """
+    global pending_candidates
+
+    data = request.get_json()
+    tile_ids = data.get("tile_ids")
+
+    if not tile_ids or not isinstance(tile_ids, list):
+        return jsonify({"error": "Missing or invalid 'tile_ids' field"}), 400
+
+    pending_candidates = tile_ids[:4] # top 4
+
+    # set the first tile in the list as the pending tile
+    result, err = _resolve_pending(tile_ids[0])
+    if err:
+        return jsonify({"error": err}), 400
+    return jsonify(result)
+
 
 @app.route('/pending/override', methods=['POST'])
 def override_pending():
@@ -144,6 +170,23 @@ def override_pending():
 
     if Project_CV is not None:
         Project_CV.tile_id_override = tile_id
+
+    return jsonify(result)
+
+@app.route('/pending/change', methods=['POST'])
+def change_pending():
+    """
+    Change the pending tile based on an id received from the frontend.
+    """
+    data = request.get_json()
+    selected_tile = data.get("selected_tile")
+
+    print(f"received tile: {selected_tile}")
+
+    success, result = _resolve_pending(selected_tile)
+
+    if not success:
+        return jsonify({"error": result}), 400
 
     return jsonify(result)
 
