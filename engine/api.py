@@ -19,6 +19,7 @@ pending_tile = None
 pending_valid = []           # list of [x, y, rotation_id]
 pending_candidates = []      # ranked list of tile_id strings from CV top-N matches
 pending_placement = None     # {"x", "y", "tile_id", "tile"} — set by /place, cleared by /meeple or /meeple/skip
+game_over = False            # flipped True by /end after final scoring
 
 
 @app.route('/gamestate', methods=['GET'])
@@ -56,15 +57,18 @@ def get_gamestate():
         "pending_tile": pending_tile,
         "pending_valid": pending_valid,
         "pending_candidates": pending_candidates,
+        "game_over": game_over,
     })
 
 
 @app.route('/start', methods=['POST'])
 def start_game():
-    global game_state, tile_bag_instance, pending_tile, pending_valid
+    global game_state, tile_bag_instance, pending_tile, pending_valid, game_over
 
     if game_state is not None:
         return jsonify({"error": "Game already started"}), 400
+
+    game_over = False
 
     data = request.get_json()
     if data is None or "players" not in data:
@@ -263,6 +267,14 @@ def place_meeple():
     if direction not in ("up", "down", "left", "right", "centre"):
         return jsonify({"error": f"Invalid direction: {direction}"}), 400
 
+    # Convert the request's colour string to the int player.colour uses internally.
+    COLOURS = ["red", "blue", "green", "yellow", "black"]
+    if colour not in COLOURS:
+        return jsonify({"error": f"Invalid colour: {colour}"}), 400
+    colour_int = COLOURS.index(colour)
+    if colour_int != game_state.current_player().colour:
+        return jsonify({"error": f"It is not {colour}'s turn"}), 400
+
     x    = pending_placement["x"]
     y    = pending_placement["y"]
     tile = pending_placement["tile"]
@@ -281,7 +293,10 @@ def place_meeple():
         game_state.manage_structures(x, y, tile, game_state.current_player())
     else:
         game_state.manage_structures(x, y, tile, None)
-        game_state.place_meeple(tile)
+        try:
+            game_state.place_meeple(tile, direction, colour_int)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
 
     game_state.next_player()
     game_state.current_turn += 1
@@ -321,15 +336,34 @@ def skip_meeple():
     })
 
 
+@app.route('/end', methods=['POST'])
+def end_game():
+    global game_over
+    if game_state is None:
+        return jsonify({"error": "Game not started"}), 400
+
+    game_state.score_end_game()
+    game_over = True
+
+    return jsonify({
+        "status": "ok",
+        "scores": [
+            {"colour": p.return_colour(), "score": p.score}
+            for p in game_state.players
+        ],
+    })
+
+
 @app.route('/reset', methods=['POST'])
 def reset_game():
-    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement
+    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement, game_over
     game_state = None
     tile_bag_instance = None
     pending_tile = None
     pending_valid = []
     pending_candidates = []
     pending_placement = None
+    game_over = False
     return jsonify({"status": "ok"})
 
 

@@ -5,6 +5,7 @@ import { useGameState } from "../hooks/useGameState";
 import "../css/App2.css";
 import EntryScreen from "./EntryScreen";
 import LoadingScreen from "./LoadingScreen";
+import EndScreen from "./EndScreen";
 import Grid from "./Grid";
 import Header from "./Header";
 
@@ -39,6 +40,7 @@ export default function App2() {
   const currentTurn = gameState?.current_turn || 0;
   const currentPlayer = gameState?.current_player || 0;
   const remaining = gameState?.remaining_pieces || 0;
+  const gameOver = gameState?.game_over || false;
 
   // Pending tile from CV (via API)
   const pendingTile = gameState?.pending_tile || null;
@@ -53,6 +55,11 @@ export default function App2() {
   // loading
   if (loading) {
     return <LoadingScreen/>;
+  }
+
+  // Game finished — show final scores
+  if (gameOver) {
+    return <EndScreen players={players} onReset={fetchState} />;
   }
 
   // Game running
