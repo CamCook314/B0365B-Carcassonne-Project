@@ -1,4 +1,4 @@
-import GameBoard from "./GameBoard";
+import GameBoard from "./Gameboard";
 import Players from "./Players";
 import DetectedTile from "./DetectedTile";
 
