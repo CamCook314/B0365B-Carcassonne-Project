@@ -48,14 +48,14 @@ def startup(canvas, centre_x, centre_y):
     canvas = cv.putText(canvas, text, org, font, scale, colour, 2, lineType)
     return canvas
 
-def tile_grid_points(grid_origin, grid_tile_size, tile_coord):
+def tile_grid_points(grid_origin, grid_tile_size, tile_coord, img_size):
     origin = grid_origin
     # grid_tile_size is static pixel value not (#,#)
     tile_x = grid_tile_size * tile_coord[0] # X coord
     tile_y = grid_tile_size * tile_coord[1] # Y coord
     tile_origin = (origin[0] + tile_x, origin[1] + tile_y)
-    tile_start = (tile_origin[0] - (TILE_SIZE // 2), tile_origin[1] + (TILE_SIZE // 2))
-    tile_end = (tile_origin[0] + (TILE_SIZE // 2), tile_origin[1] - (TILE_SIZE // 2))
+    tile_start = (tile_origin[0] - (img_size // 2), tile_origin[1] + (img_size // 2))
+    tile_end = (tile_origin[0] + (img_size // 2), tile_origin[1] - (img_size // 2))
     return (tile_start, tile_end, tile_origin)
 
 ## INVALID MOVE
@@ -69,7 +69,7 @@ def invalid_move(canvas, grid_origin, grid_tile_size, tile_coord):
 # EVENT TYPES
 ## REVERSE MOVE ORDER
 def event_reverse_move(canvas, grid_origin, grid_tile_size, tile_coord):
-    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord)
+    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, EVENT_SIZE)
     colour = (255, 0, 0) # BLUE
     thickness = -1
     cv.rectangle(canvas, tile_data[0], tile_data[1], colour, thickness)
@@ -77,7 +77,7 @@ def event_reverse_move(canvas, grid_origin, grid_tile_size, tile_coord):
 
 ## MORE SCORE
 def event_more_score(canvas, grid_origin, grid_tile_size, tile_coord):
-    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord)
+    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, EVENT_SIZE)
     colour = (0, 255, 0) # GREEN
     thickness = -1
     cv.rectangle(canvas, tile_data[0], tile_data[1], colour, thickness)
@@ -89,12 +89,12 @@ def projector_main():
     # Get screens info, projector in extend mode is classed as extra screen
     monitors = screeninfo.get_monitors()
     # Check to make sure monitor is connected
-    if len(monitors) > 1:
+    if len(monitors) == 1:
         print("Projector not connected in extended mode")
         exit()
 
     # Get project screen settings
-    projector = monitors[0]
+    projector = monitors[1]
     # Define projector resolution
     proj_w, proj_h = projector.width, projector.height
 
@@ -119,13 +119,13 @@ def projector_main():
                 for value in values:
                     if key == "REVERSE":
                         canvas = event_reverse_move(canvas, Project_CV.grid_origin,
-                                                    Project_CV.grid_tile_size, value)
+                                                    round(Project_CV.grid_tile_size), value)
                     elif key == "MORE_SCORE":
                         canvas = event_more_score(canvas, Project_CV.grid_origin,
-                                                    Project_CV.grid_tile_size, value)
+                                                    round(Project_CV.grid_tile_size), value)
             if invalid_move:
                 canvas = invalid_move(canvas, Project_CV.grid_origin, 
-                                      Project_CV.grid_tile_size, invalid_coord)
+                                      round(Project_CV.grid_tile_size), invalid_coord)
         # Show image
         cv.imshow("Projector", canvas)
         # Wait for any key and then exit
