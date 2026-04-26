@@ -48,3 +48,12 @@ export async function setPendingTileList(tileIds) {
   }
   return res.json();
 }
+
+export async function resetGame() {
+  const res = await fetch(`${BASE_URL}/reset`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to reset game");
+  }
+  return res.json();
+}

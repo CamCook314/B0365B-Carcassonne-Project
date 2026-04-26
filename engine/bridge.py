@@ -185,7 +185,12 @@ def main():
 
         print("[bridge] Tile bag empty - game over")
 
-        # TODO: Calculate score, post to website etc
+        # Trigger end-game scoring on the engine and report final scores
+        resp = _post("/end", {})
+        if resp and resp.get("status") == "ok":
+            print(f"[bridge] /end OK - final scores: {resp.get('scores')}")
+        else:
+            print(f"[bridge] /end error: {resp}")
 
     except KeyboardInterrupt:
         print("\n[bridge] Shutting down...")

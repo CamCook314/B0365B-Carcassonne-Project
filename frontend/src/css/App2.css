@@ -199,3 +199,45 @@ body {
   text-align: center;
   margin-bottom: 8px;
 }
+.end-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+  gap: 1.5rem;
+}
+
+.end-screen h1 { font-size: 3rem; }
+.end-screen h2 { font-size: 1.5rem; color: var(--dim); }
+
+.scoreboard {
+  border-collapse: collapse;
+  background: var(--card);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.scoreboard th,
+.scoreboard td {
+  padding: 0.75rem 1.5rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.scoreboard th { background: var(--card-alt); font-weight: 600; }
+.scoreboard tr:last-child td { border-bottom: none; }
+
+.end-screen button {
+  padding: 0.75rem 2rem;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.end-screen button:hover { opacity: 0.9; }
