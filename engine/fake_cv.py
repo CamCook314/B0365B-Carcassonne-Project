@@ -21,14 +21,28 @@ import requests
 BASE_URL = "http://127.0.0.1:1234"
 
 
+def _safe_json(res):
+    """Return res.json() if possible, otherwise a dict with the raw text.
+    The API now returns JSON for errors too, but if Flask debug mode is on
+    or the server crashes hard, the body may be HTML. This makes sure
+    callers always get a dict."""
+    try:
+        return res.json()
+    except Exception:
+        body = res.text or ""
+        # Pull a short summary out of HTML if present
+        snippet = body.strip().split("\n")[0][:200]
+        return {"error": f"non-JSON response (status {res.status_code})", "raw": snippet}
+
+
 def api_get(path, **kwargs):
     res = requests.get(f"{BASE_URL}{path}", **kwargs)
-    return res.ok, res.json()
+    return res.ok, _safe_json(res)
 
 
 def api_post(path, **kwargs):
     res = requests.post(f"{BASE_URL}{path}", **kwargs)
-    return res.ok, res.json()
+    return res.ok, _safe_json(res)
 
 
 def run():
@@ -122,10 +136,63 @@ def run():
             ok, result = api_post("/place", json={"tile_id": tile_num, "x": x, "y": y})
             if ok:
                 print(f"  Placed {tile_num} at ({x}, {y})")
+                # Now handle the meeple step
+                _handle_meeple_step()
                 break
             else:
                 print(f"  Error: {result.get('error', 'Unknown')}")
                 continue
+
+
+def _handle_meeple_step():
+    """After a tile is placed, prompt the user to place a meeple or skip."""
+    # Fetch the current pending_placement to see which sides are valid
+    ok, state = api_get("/gamestate")
+    if not ok:
+        print("  Could not fetch gamestate after placement.")
+        return
+
+    pending = state.get("pending_placement")
+    if not pending:
+        # No pending placement — turn already advanced or no meeple step needed
+        return
+
+    valid_sides = pending.get("valid_sides", [])
+
+    while True:
+        if not valid_sides:
+            print("  No valid meeple positions on this tile — skipping.")
+            api_post("/meeple/skip")
+            return
+
+        print(f"\n  Place a meeple? Valid sides: {valid_sides}")
+        print(f"    Options: {', '.join(valid_sides)}, or 'skip'")
+        choice = input("  Meeple direction: ").strip().lower()
+
+        if choice in ("skip", "s", ""):
+            ok, result = api_post("/meeple/skip")
+            if ok:
+                print(f"  Skipped. Turn {result.get('turn')}, next player P{result.get('current_player', 0) + 1}")
+            else:
+                print(f"  Error skipping: {result.get('error', 'Unknown')}")
+            return
+
+        if choice not in valid_sides:
+            print(f"  Invalid choice. Must be one of {valid_sides} or 'skip'.")
+            continue
+
+        ok, result = api_post("/meeple", json={"direction": choice})
+        if ok:
+            print(f"  Meeple placed on '{choice}'. Turn {result.get('turn')}, next player P{result.get('current_player', 0) + 1}")
+            return
+        else:
+            print(f"  Error placing meeple: {result.get('error', 'Unknown')}")
+            if "traceback" in result:
+                print("  --- server traceback ---")
+                print(result["traceback"])
+                print("  ------------------------")
+            # let the user try again
+            continue
 
 
 if __name__ == "__main__":

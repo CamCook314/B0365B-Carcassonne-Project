@@ -12,6 +12,20 @@ app = Flask(__name__)
 app.json.sort_keys = False
 CORS(app)
 
+
+@app.errorhandler(Exception)
+def _handle_unhandled(e):
+    """Return JSON for any uncaught exception so clients (fake_cv, frontend)
+    don't choke on Flask's HTML traceback page when an endpoint crashes."""
+    import traceback as _tb
+    tb_str = _tb.format_exc()
+    print("[api] Unhandled exception:", file=sys.stderr)
+    print(tb_str, file=sys.stderr, flush=True)
+    return jsonify({
+        "error": str(e) or e.__class__.__name__,
+        "traceback": tb_str,
+    }), 500
+
 game_state = None
 tile_bag_instance = None
 empty_bag_instance = None
@@ -28,6 +42,22 @@ def get_gamestate():
 
     board_serialised = {}
     for (x, y), t in game_state.get_board_xy().items():
+  
+        meeple_info = None
+        if isinstance(t.meeple_attached, tuple) and t.meeple_attached and t.meeple_attached[0]:
+            _, up, down, left, right = t.meeple_attached
+            if up:        side = "up"
+            elif down:    side = "down"
+            elif left:    side = "left"
+            elif right:   side = "right"
+            else:         side = "centre"
+            meeple_info = {
+                "side": side,
+                "player_index": getattr(t, "meeple_player_index", None),
+            }
+        elif t.meeple_attached is True:
+            meeple_info = {"side": "centre", "player_index": getattr(t, "meeple_player_index", None)}
+
         board_serialised[f"{x},{y}"] = {
             "up": t.up,
             "down": t.down,
@@ -36,7 +66,8 @@ def get_gamestate():
             "tile_id": t.tile_id,
             "feature_continues": t.feature_continues,
             "attribute": t.attribute,
-            "meeple_attached": t.meeple_attached,
+            "meeple_attached": t.meeple_attached if not isinstance(t.meeple_attached, tuple) else list(t.meeple_attached),
+            "meeple": meeple_info,
         }
 
     players_serialised = []
@@ -47,6 +78,23 @@ def get_gamestate():
             "score": p.score,
         })
 
+    pending_placement_serialised = None
+    if pending_placement is not None:
+        t = pending_placement["tile"]
+        valid_sides = []
+        for side in ("up", "down", "left", "right"):
+            if getattr(t, side) in (1, 2):
+                valid_sides.append(side)
+        if t.attribute == 2:
+            valid_sides.append("centre")
+
+        pending_placement_serialised = {
+            "x": pending_placement["x"],
+            "y": pending_placement["y"],
+            "tile_id": pending_placement["tile_id"],
+            "valid_sides": valid_sides,
+        }
+
     return jsonify({
         "board": board_serialised,
         "players": players_serialised,
@@ -56,6 +104,7 @@ def get_gamestate():
         "pending_tile": pending_tile,
         "pending_valid": pending_valid,
         "pending_candidates": pending_candidates,
+        "pending_placement": pending_placement_serialised,
     })
 
 
@@ -193,7 +242,7 @@ def change_pending():
 
 @app.route('/pending/clear', methods=['POST'])
 def clear_pending():
-    global pending_tile, pending_valid, pending_candidates
+    global pending_tile, pending_valid, pending_candidatesw
     pending_tile = None
     pending_valid = []
     pending_candidates = []
@@ -238,8 +287,14 @@ def place_tile():
     pending_tile = None
     pending_valid = []
     pending_candidates = []
-    # Store placement so /meeple or /meeple/skip can finish the turn
-    pending_placement = {"x": x, "y": y, "tile_id": placed_tile_id, "tile": tile_obj}
+
+    pending_placement = {
+        "x": x,
+        "y": y,
+        "tile_id": placed_tile_id,
+        "tile": tile_obj,
+        "structures_managed": False,
+    }
 
     return jsonify({
         "status": "ok",
@@ -259,13 +314,33 @@ def place_meeple():
 
     data = request.get_json()
     direction = data.get("direction")  # "up", "down", "left", "right", "centre"
-    colour    = data.get("colour")     # "red", "blue", "green", "yellow", "black"
     if direction not in ("up", "down", "left", "right", "centre"):
         return jsonify({"error": f"Invalid direction: {direction}"}), 400
 
     x    = pending_placement["x"]
     y    = pending_placement["y"]
     tile = pending_placement["tile"]
+
+    if direction == "centre":
+        if tile.attribute != 2:
+            return jsonify({"error": "Centre meeple only valid on monastery tiles"}), 400
+    else:
+        if getattr(tile, direction) not in (1, 2):
+            return jsonify({"error": f"No road or city on side '{direction}'"}), 400
+
+    current_player = game_state.current_player()
+    current_index = game_state.currentIndex
+    if current_player.meeples <= 0:
+        return jsonify({"error": "No meeples left for this player"}), 400
+
+    if not pending_placement.get("structures_managed"):
+        game_state.manage_structures(x, y, tile, None)
+        pending_placement["structures_managed"] = True
+
+    try:
+        game_state.place_meeple(tile, direction)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
     dir_to_attached = {
         "up":     (1, 1, 0, 0, 0),
@@ -275,13 +350,7 @@ def place_meeple():
         "centre": (1, 0, 0, 0, 0),
     }
     tile.meeple_attached = dir_to_attached[direction]
-
-    # Monastery: manage_structures handles player attachment at creation time
-    if direction == "centre" and tile.attribute == 2:
-        game_state.manage_structures(x, y, tile, game_state.current_player())
-    else:
-        game_state.manage_structures(x, y, tile, None)
-        game_state.place_meeple(tile)
+    tile.meeple_player_index = current_index
 
     game_state.next_player()
     game_state.current_turn += 1
@@ -289,8 +358,8 @@ def place_meeple():
 
     return jsonify({
         "status": "ok",
-        "meeple_colour": colour,
         "meeple_direction": direction,
+        "player_index": current_index,
         "turn": game_state.current_turn,
         "current_player": game_state.currentIndex,
     })
@@ -309,7 +378,10 @@ def skip_meeple():
     y    = pending_placement["y"]
     tile = pending_placement["tile"]
 
-    game_state.manage_structures(x, y, tile, None)
+    if not pending_placement.get("structures_managed"):
+        game_state.manage_structures(x, y, tile, None)
+        pending_placement["structures_managed"] = True
+
     game_state.next_player()
     game_state.current_turn += 1
     pending_placement = None

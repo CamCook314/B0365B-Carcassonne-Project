@@ -31,9 +31,20 @@ export default function App2() {
           tileId: tile.tile_id,
           attribute: tile.attribute,
           meeple_attached: tile.meeple_attached,
+          meeple: tile.meeple,
         };
       })
     : [];
+
+  // Build a flat meeples list for the GameBoard
+  const meeples = boardTiles
+    .filter((t) => t.meeple)
+    .map((t) => ({
+      col: t.col,
+      row: t.row,
+      side: t.meeple.side,
+      playerIndex: t.meeple.player_index,
+    }));
 
   const players = gameState?.players || [];
   const currentTurn = gameState?.current_turn || 0;
@@ -45,7 +56,9 @@ export default function App2() {
   const validPlacements = gameState?.pending_valid || [];
   const pendingTileList = gameState?.pending_candidates || [];
 
-  // entry screens for picking player numbers for api
+  // Pending placement awaiting a meeple decision
+  const pendingPlacement = gameState?.pending_placement || null;
+
   if (!loading && !gameState) {
     return <EntryScreen error={error} handleStart={handleStart} />;
   }
@@ -55,7 +68,6 @@ export default function App2() {
     return <LoadingScreen/>;
   }
 
-  // Game running
   return (
     <div className="app">
       {/* Header */}
@@ -65,11 +77,13 @@ export default function App2() {
         currentPlayer={currentPlayer}
         players={players}
         boardTiles={boardTiles}
+        meeples={meeples}
         validPlacements={validPlacements}
         remaining={remaining}
         currentTurn={currentTurn}
         pendingTile={pendingTile}
         pendingTileList={pendingTileList}
+        pendingPlacement={pendingPlacement}
       />
     </div>
   );

@@ -174,42 +174,49 @@ class gameStateClass:
 	def current_player(self):
 		return self.players[self.currentIndex]
 
-	#Place meeple on tile and where on tile if it has multiple places, well as colour of meeple
-	def place_meeple(self, tile, direction, Colour):
-		for p in self.players:
-			if p.colour == Colour and p is not self.current_player():
-				raise ValueError(f"Colour '{Colour}' already taken by another player")
-
+	# Place a meeple on the just-placed tile, on the given direction
+	# ("up", "down", "left", "right", "centre"). Uses the current player.
+	# The colour is implicit (each player has a fixed colour from index).
+	def place_meeple(self, tile, direction):
 		player = self.current_player()
 
-		if player.colour is None:
-			player.colour = Colour
-		elif player.colour != Colour:
-			raise ValueError(f"Player already assigned colour {player.return_colour()}")
-		if tile.meeple_attached == True:
-			raise ValueError("Meeple already placed on this tile")
-		
-		player = self.current_player()
 		if player.meeples <= 0:
 			raise ValueError("No meeples left")
 
-		#tile.meeple_attached = (1, up, down, left, right)
-		player.meeples -= 1
-
-
-		if tile.attribute == 2:
-			tile.meeple_attached = True
+		# Monastery meeple goes in the centre
+		if direction == "centre":
+			if tile.attribute != 2:
+				raise ValueError("Centre meeple only valid on monastery tiles")
+			player.meeples -= 1
+			# Find the monastery structure for this tile and attach player
 			for structure in self.structures:
 				if structure.type == 3:
+					for t, _r, _c in structure.tiles_used:
+						if t is tile:
+							structure.add_player(player)
+							return
+			return
+
+		# Edge meeple — find the structure that owns this tile+direction edge
+		for structure in self.structures:
+			if structure.type == 3:
+				continue
+			# Edge could be in structure.edges if the edge is still open,
+			# or it might already have been merged in. Either way, if the
+			# tile is part of the structure AND the relevant side matches
+			# the structure's type, this is the right one.
+			edge_value = getattr(tile, direction)
+			if edge_value != structure.type:
+				continue
+			for t, _r, _c in structure.tiles_used:
+				if t is tile:
 					structure.add_player(player)
+					player.meeples -= 1
 					return
 
-		tile.meeple_attached = True
-
-		for structure in self.structures:
-			if (tile, direction) in structure.edges:
-				structure.add_player(self.current_player())
-				break
+		# No matching structure — silently no-op so we don't crash the turn.
+		# (This shouldn't happen if the frontend only offers valid sides.)
+		print(f"[place_meeple] No structure found for tile direction={direction}")
 
 
 	def check_valid_placement(self, x, y, tile):
@@ -518,7 +525,7 @@ if __name__ == "__main__":
 
 	game.place_tile(3, 3, t1)
 	game.manage_structures(3, 3, t1)
-	game.place_meeple(t1, "up", "red")
+	game.place_meeple(t1, "up")
 
 	printBoard(game)
 	print(game.structures)
@@ -530,7 +537,7 @@ if __name__ == "__main__":
 	
 	game.place_tile(3, 3, t1)
 	game.manage_structures(3, 3, t1)
-	game.place_meeple(t1, "up", "red")
+	game.place_meeple(t1, "up")
 
 	print("Placed first tile")
 	printBoard(game)
