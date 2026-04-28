@@ -1,5 +1,6 @@
 from tile_set import tile_set
 from tile import tile
+from events import Event
 # Variable declarations
 import random
 
@@ -37,6 +38,16 @@ class gameStateClass:
 		self.event_pool = []
 		self.extra_turn = False
 
+		for i in range(4):  # 4 event coords
+			while True:
+				randx = random.randint(-5, 5)
+				randy = random.randint(-5, 5)
+
+				if (randx, randy) not in [e.coords for e in self.event_pool]:
+					self.event_pool.append(Event((randx, randy)))
+					break
+			
+
 	# converts x,y logical coordinates to array indexes using offsets.
 	# x increases going right, y increases going up (standard math axes).
 	# internally the 2d array has rows increasing downward, so y is negated.
@@ -55,7 +66,7 @@ class gameStateClass:
 		return array_row, array_col
 
 	# expands the board when a tile placement would fall outside the current
-  	# array bounds. works on array indexes after converting from x,y coordinates.
+	# array bounds. works on array indexes after converting from x,y coordinates.
 	def expand_board(self, x, y):
 		array_row, array_col = self.to_array_index(x, y)
 		rows = len(self.board)
@@ -102,6 +113,10 @@ class gameStateClass:
 		self.remaining_pieces -= 1
 
 		tile.player_placed = self.current_player()
+		for event in self.event_pool:
+			if event.coords == (x, y):
+				event.play(self)
+
 
 	def remove_tile(self, x, y, tile):
 		array_row, array_col = self.to_array_index(x, y)
