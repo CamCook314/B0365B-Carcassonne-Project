@@ -1,6 +1,7 @@
 from tile_set import tile_set
 from tile import tile
 # Variable declarations
+import random
 
 class player:
 
@@ -33,6 +34,8 @@ class gameStateClass:
 		self.remaining_pieces = 72
 		self.current_turn = 1
 		self.structures = []
+		self.event_pool = []
+		self.extra_turn = False
 
 	# converts x,y logical coordinates to array indexes using offsets.
 	# x increases going right, y increases going up (standard math axes).
@@ -85,6 +88,10 @@ class gameStateClass:
 			for r in self.board:
 				r.extend([None] * 10)
 
+	def extra_turn_event(self): # assuming they take it now
+		self.extra_turn = True
+		
+
 	# x = column (increase goes right), y = row (increase goes up)
 	def place_tile(self, x, y, tile):
 		self.expand_board(x, y)
@@ -93,6 +100,16 @@ class gameStateClass:
 		array_row, array_col = self.to_array_index(x, y)
 		self.board[array_row][array_col] = tile
 		self.remaining_pieces -= 1
+
+		tile.player_placed = self.current_player()
+
+	def remove_tile(self, x, y, tile):
+		array_row, array_col = self.to_array_index(x, y)
+		self.board[array_row][array_col] = None
+		self.remaining_pieces += 1
+
+		#tilebag.add(tile) add tile back into tilebag depending on what it can do
+
 
 	#player is None if no meeple added
 	def manage_structures(self, row, col, tile, player=None):
@@ -169,6 +186,9 @@ class gameStateClass:
 				self.structures.remove(structure)
 
 	def next_player(self):
+		if self.extra_turn:
+			self.extra_turn = False
+			return
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
 
 	def current_player(self):
