@@ -45,6 +45,7 @@ class gameStateClass:
 
 				if (randx, randy) not in [e.coords for e in self.event_pool]:
 					self.event_pool.append(Event((randx, randy)))
+					print(Event((randx, randy)))
 					break
 			
 
@@ -204,7 +205,11 @@ class gameStateClass:
 		if self.extra_turn:
 			self.extra_turn = False
 			return
+		for ev in self.event_pool:
+			if ev.name == "volcano" and ev.active == True:
+				ev.volcano_check(self)
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
+		self.current_turn += 1
 
 	def current_player(self):
 		return self.players[self.currentIndex]
