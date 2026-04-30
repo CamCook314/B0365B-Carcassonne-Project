@@ -37,6 +37,7 @@ class gameStateClass:
 		self.structures = []
 		self.event_pool = []
 		self.extra_turn = False
+		self.unrestCheck = False
 
 		for i in range(4):  # 4 event coords
 			while True:
@@ -198,7 +199,7 @@ class gameStateClass:
 			self.structures.append(temp_struct)
 		for structure in self.structures:
 			if structure.check_completed(self.board):
-				structure.score_structure()
+				structure.score_structure(self.unrestCheck)
 				self.structures.remove(structure)
 
 	def next_player(self):
@@ -477,7 +478,7 @@ class structures:
 					break
 		return connections
 
-	def score_structure(self):
+	def score_structure(self, unrest):
 		"""
 		This method scores a structure once it is deemed completed
 		"""
@@ -494,7 +495,11 @@ class structures:
 				temp_score += 1
 				continue
 			elif self.type == 2:
-				if tile.attribute == 1:
+				if tile.attribute == 1 and unrest == True:
+					temp_score += 2
+				else:
+					temp_score += 1
+				if tile.attribute == 1 and unrest == False:
 					temp_score += 4
 				else:
 					temp_score += 2
