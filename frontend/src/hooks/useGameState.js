@@ -9,7 +9,7 @@ export function useGameState() {
   
 
 
-  const fetchState = async () => {
+  const fetchState = useCallback(async () => {
     try {
       const data = await getGameState();
       setGameState(data);
@@ -20,7 +20,7 @@ export function useGameState() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchState();

@@ -52,7 +52,7 @@ def get_gamestate():
         "board": board_serialised,
         "players": players_serialised,
         "current_player": game_state.currentIndex,
-        "remaining_pieces": game_state.remaining_pieces,
+        "remaining_pieces": len(tile_bag_instance.tile_bag) // 4 if tile_bag_instance else 0,
         "current_turn": game_state.current_turn,
         "pending_tile": pending_tile,
         "pending_valid": pending_valid,
@@ -221,16 +221,19 @@ def place_tile():
     # fall back to the first valid rotation for this position.
     rotation_id = data.get("rotation_id")
     placed_tile_id = None
+    valid_at_pos = [rid for px, py, rid in pending_valid if px == x and py == y]
+    if not valid_at_pos:
+        return jsonify({"error": "Invalid placement position"}), 400
     if rotation_id is not None:
-        valid_at_pos = [rid for px, py, rid in pending_valid if px == x and py == y]
-        if not valid_at_pos:
-            return jsonify({"error": "Invalid placement position"}), 400
-        placed_tile_id = rotation_id
+        if rotation_id in valid_at_pos:
+            placed_tile_id = rotation_id
+        else:
+            # CV rotation detection returned a rotation that doesn't fit — fall back
+            # to the engine-computed valid rotation for this position.
+            placed_tile_id = valid_at_pos[0]
+            print(f"[place] CV rotation {rotation_id} not valid at ({x},{y}) — using {placed_tile_id}")
     else:
-        for px, py, rid in pending_valid:
-            if px == x and py == y:
-                placed_tile_id = rid
-                break
+        placed_tile_id = valid_at_pos[0]
 
     if placed_tile_id is None:
         return jsonify({"error": "Invalid placement"}), 400

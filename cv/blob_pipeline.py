@@ -3,23 +3,45 @@ blob_pipeline.py — Image preprocessing for tile detection.
 
 Converts a raw camera frame into blob masks and classified contours.
 All tunable CV parameters live here so they're in one place.
+
+Parameters can be overridden at runtime by cv/config.json (written by
+calibrate_blob.py). The hardcoded values below are the fallback defaults.
 """
 
 import cv2 as cv
 import numpy as np
+import json
+import os
 
-# --- Tunable parameters ---
+# --- Default parameters (overridden by config.json if present) ---
 BLUR_KERNEL        = 11   # Suppresses wood grain before edge detection
-CANNY_LOW          = 40
-CANNY_HIGH         = 100
+CANNY_LOW          = 30
+CANNY_HIGH         = 80
 DENSITY_BLUR       = 21   # Keeps edge density concentrated around tile edges
-DENSITY_THRESHOLD  = 8    # Background grain stays below this
+DENSITY_THRESHOLD  = 10   # Raised vs original to compensate for more sensitive Canny (30/80)
 MORPH_OPEN_KERNEL  = 7    # Removes isolated noise blobs smaller than this
 MORPH_CLOSE_KERNEL = 45   # Fills intra-tile gaps; must stay < tile_size/2
-                           # (~40px for 80-90px tiles at 1080p processing res)
-SAT_THRESHOLD      = 70   # Min HSV saturation (0–255) to count as tile colour
+SAT_THRESHOLD      = 90   # Min HSV saturation (0–255) to count as tile colour
 TILE_AREA_MIN      = 3000
 TILE_AREA_MAX      = 100_000_000
+TILE_ASPECT_MAX    = 3.0   # Max bounding-box aspect ratio; rejects elongated non-tile blobs
+
+# --- Load overrides from config.json if it exists ---
+_CFG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+if os.path.exists(_CFG_PATH):
+    with open(_CFG_PATH) as _f:
+        _cfg = json.load(_f)
+    BLUR_KERNEL        = _cfg.get("BLUR_KERNEL",        BLUR_KERNEL)
+    CANNY_LOW          = _cfg.get("CANNY_LOW",          CANNY_LOW)
+    CANNY_HIGH         = _cfg.get("CANNY_HIGH",         CANNY_HIGH)
+    DENSITY_BLUR       = _cfg.get("DENSITY_BLUR",       DENSITY_BLUR)
+    DENSITY_THRESHOLD  = _cfg.get("DENSITY_THRESHOLD",  DENSITY_THRESHOLD)
+    MORPH_OPEN_KERNEL  = _cfg.get("MORPH_OPEN_KERNEL",  MORPH_OPEN_KERNEL)
+    MORPH_CLOSE_KERNEL = _cfg.get("MORPH_CLOSE_KERNEL", MORPH_CLOSE_KERNEL)
+    SAT_THRESHOLD      = _cfg.get("SAT_THRESHOLD",      SAT_THRESHOLD)
+    TILE_AREA_MIN      = _cfg.get("TILE_AREA_MIN",      TILE_AREA_MIN)
+    TILE_AREA_MAX      = _cfg.get("TILE_AREA_MAX",      TILE_AREA_MAX)
+    TILE_ASPECT_MAX    = _cfg.get("TILE_ASPECT_MAX",    TILE_ASPECT_MAX)
 
 
 def process_frame(frame, sat_threshold=SAT_THRESHOLD):
@@ -54,9 +76,19 @@ def mask_centroid(mask):
 
 
 def find_contours(blobs):
-    """Find external contours and filter by area."""
+    """Find external contours and filter by area and aspect ratio."""
     contours, _ = cv.findContours(blobs, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-    return [c for c in contours if TILE_AREA_MIN < cv.contourArea(c) < TILE_AREA_MAX]
+    valid = []
+    for c in contours:
+        if not (TILE_AREA_MIN < cv.contourArea(c) < TILE_AREA_MAX):
+            continue
+        _, _, w, h = cv.boundingRect(c)
+        if w == 0 or h == 0:
+            continue
+        if max(w, h) / min(w, h) > TILE_ASPECT_MAX:
+            continue
+        valid.append(c)
+    return valid
 
 
 def classify_contours(valid, board_mask, blob_shape):

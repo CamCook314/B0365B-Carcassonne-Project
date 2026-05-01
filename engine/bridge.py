@@ -49,8 +49,13 @@ def _handle_tile_checked():
     tile_id    = Project_CV.tile_id
     candidates = Project_CV.tile_candidates   # list of (score, tile_id) tuples
 
-    # Send ranked tile IDs only (frontend doesn't need raw scores)
-    candidate_ids = [rid for _, rid in candidates]
+    # Send top 4 alternatives (different family from the pending tile).
+    # Exclude the same family — it's already shown as the main tile preview.
+    pending_family = int(tile_id.replace("ID", "")) // 4
+    candidate_ids = [
+        rid for _, rid in candidates
+        if int(rid.replace("ID", "")) // 4 != pending_family
+    ][:4]
 
     print(f"[bridge] tile_checked - tile={tile_id}  candidates={candidate_ids[:3]}...")
     resp = _post("/pending", {"tile_id": tile_id, "candidates": candidate_ids})
@@ -107,6 +112,8 @@ def _handle_meeple_skip():
 # ── Thread targets ─────────────────────────────────────────────────────────────
 
 def _run_api():
+    import logging
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
     engine_api.app.run(host="127.0.0.1", port=1234, debug=False, use_reloader=False)
 
 
@@ -151,14 +158,15 @@ def main():
         game = engine_api.game_state
         print(f"[bridge] Game started - {len(game.players)} players.\n")
 
-        while game.remaining_pieces > 0:
+        while len(engine_api.tile_bag_instance.tile_bag) > 0:
             for p in game.players: # looping through each player in the game (use p to dictate which player's turn)
 
                 # breaks if there are no pieces left, the game should end
-                if game.remaining_pieces <= 0:
+                if len(engine_api.tile_bag_instance.tile_bag) == 0:
                     break
 
-                print(f"[bridge] {p.return_colour()}'s turn - {game.remaining_pieces} tiles left")
+                tiles_left = len(engine_api.tile_bag_instance.tile_bag) // 4
+                print(f"[bridge] {p.return_colour()}'s turn - {tiles_left} tiles left")
 
 
                 turn_done = False

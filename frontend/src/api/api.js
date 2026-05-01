@@ -35,6 +35,19 @@ export async function setPendingTile(tileId) {
   return res.json();
 }
 
+export async function overridePendingTile(tileId) {
+  const res = await fetch(`${BASE_URL}/pending/override`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tile_id: tileId }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to override pending tile");
+  }
+  return res.json();
+}
+
 
 export async function setPendingTileList(tileIds) {
   const res = await fetch(`${BASE_URL}/pending/list`, {

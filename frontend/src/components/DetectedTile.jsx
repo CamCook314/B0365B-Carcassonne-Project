@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { setPendingTile } from "../api/api.js";
+import { overridePendingTile } from "../api/api.js";
 
 
 export default function DetectedTile({ pendingTile, validPlacements, pendingTileList }) {
@@ -60,33 +59,30 @@ function CardBody({ pendingTile, validPlacements, pendingTileList }) {
 }
 
 function TileCandidates({ pendingTileList }) {
-    // unused?
-    const [pendingInput, setPendingInput] = useState(0);
-    
     return (
-        <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "center" }}>
-            { /* iterate through ids for each button */ }
+        <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
             {pendingTileList.map((tileId, index) => (
                 <button
-                key={index}
-                onClick={() => setPendingTile(Number(tileId))}
-                style={{
-                padding: "1px 1px",
-                background: "none",
-                color: "var(--bg)",
-                width: 50,
-                height: 50
-                }}>
-                <img
-                    src={`/tiles/ID${tileId*4}.jpg`}
-                    alt={`ID${tileId*4}.jpg`}
+                    key={index}
+                    onClick={() => overridePendingTile(tileId)}
                     style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
+                        padding: "1px 1px",
+                        background: "none",
+                        color: "var(--bg)",
+                        width: 50,
+                        height: 50,
+                        border: "none",
+                        cursor: "pointer",
                     }}
-                />
-        </button> 
-      ))}
-    </div>
-)}
+                >
+                    <img
+                        src={`/tiles/${tileId}.jpg`}
+                        alt={tileId}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        onError={(e) => { e.target.style.display = "none"; }}
+                    />
+                </button>
+            ))}
+        </div>
+    );
+}
