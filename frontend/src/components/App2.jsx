@@ -10,7 +10,7 @@ import Grid from "./Grid";
 import Header from "./Header";
 
 export default function App2() {
-  const { gameState, loading, error, retry: fetchState } = useGameState();
+  const { gameState, loading, error, retry: fetchState, immediateFetch } = useGameState();
 
   // start a new game
   const handleStart = async (numPlayers) => {
@@ -77,6 +77,10 @@ export default function App2() {
         currentTurn={currentTurn}
         pendingTile={pendingTile}
         pendingTileList={pendingTileList}
+        refresh={async () => {
+          await immediateFetch();
+          console.log("Refreshed game state");
+        }}
       />
     </div>
   );

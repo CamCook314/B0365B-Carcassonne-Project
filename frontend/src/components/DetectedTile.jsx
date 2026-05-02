@@ -1,7 +1,7 @@
 import { overridePendingTile } from "../api/api.js";
+import { useGameState } from "../hooks/useGameState";
 
-
-export default function DetectedTile({ pendingTile, validPlacements, pendingTileList }) {
+export default function DetectedTile({ pendingTile, validPlacements, pendingTileList, refresh }) {
   return <div className="card card-detect">
     <div className="card-header">
       <span>Detected Tile</span>
@@ -14,11 +14,12 @@ export default function DetectedTile({ pendingTile, validPlacements, pendingTile
     <CardBody 
         pendingTile={pendingTile} 
         validPlacements={validPlacements} 
-        pendingTileList={pendingTileList} />
+        pendingTileList={pendingTileList} 
+        refresh={refresh} />
   </div>;
 }
 
-function CardBody({ pendingTile, validPlacements, pendingTileList }) {
+function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
     return <div className="card-body" style={{ textAlign: "center" }}>
         {pendingTile ? (
             <>
@@ -47,7 +48,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList }) {
                     {validPlacements.length} valid placement
                     {validPlacements.length !== 1 ? "s" : ""}
                 </div>
-                <TileCandidates pendingTileList={pendingTileList} />
+                <TileCandidates pendingTileList={pendingTileList} refresh={refresh} />
             </>
         ) : (
             <>
@@ -58,13 +59,16 @@ function CardBody({ pendingTile, validPlacements, pendingTileList }) {
     </div>; 
 }
 
-function TileCandidates({ pendingTileList }) {
+function TileCandidates({ pendingTileList, refresh }) {
     return (
         <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
             {pendingTileList.map((tileId, index) => (
                 <button
                     key={index}
-                    onClick={() => overridePendingTile(tileId)}
+                    onClick={() => {
+                        overridePendingTile(tileId);
+                        refresh();
+                    }}
                     style={{
                         padding: "1px 1px",
                         background: "none",

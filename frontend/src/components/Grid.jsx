@@ -2,7 +2,7 @@ import GameBoard from "./Gameboard";
 import Players from "./Players";
 import DetectedTile from "./DetectedTile";
 
-export default function Grid({ currentPlayer, players, boardTiles, validPlacements, remaining, currentTurn, pendingTile, pendingTileList }) {
+export default function Grid({ currentPlayer, players, boardTiles, validPlacements, remaining, currentTurn, pendingTile, pendingTileList, refresh }) {
   return <div className="grid">
     <div className="col">
       {/* Players */}
@@ -52,7 +52,7 @@ export default function Grid({ currentPlayer, players, boardTiles, validPlacemen
 
     <div className="col">
       {/* Detected Tile */}
-      <DetectedTile pendingTile={pendingTile} validPlacements={validPlacements} pendingTileList={pendingTileList} />
+      <DetectedTile pendingTile={pendingTile} validPlacements={validPlacements} pendingTileList={pendingTileList} refresh={refresh} />
 
       {/* Game Stats */}
       <div className="card card-stats">

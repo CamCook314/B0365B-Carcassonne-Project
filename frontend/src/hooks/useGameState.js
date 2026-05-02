@@ -1,13 +1,15 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { getGameState } from '../api/api.js';
 import { POLLING_INTERVAL } from '../constants/config.js';
+
+
 
 export function useGameState() {
   const [gameState, setGameState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-
+  const pollingRef = useRef(null);
 
   const fetchState = useCallback(async () => {
     try {
@@ -22,11 +24,19 @@ export function useGameState() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchState();
-    const interval = setInterval(fetchState, POLLING_INTERVAL);
-    return () => clearInterval(interval);
+
+  const immediateFetch = useCallback(async () => {
+    clearInterval(pollingRef.current);
+    pollingRef.current = null;
+    await fetchState();
   }, [fetchState]);
 
-  return { gameState, loading, error, retry: fetchState };
+  useEffect(() => {
+    fetchState();
+    pollingRef.current = setInterval(fetchState, POLLING_INTERVAL);
+    return () => clearInterval(pollingRef.current);
+  }, [fetchState]);
+
+  return { gameState, loading, error, retry: fetchState, immediateFetch };
 }
+
