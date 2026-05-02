@@ -76,10 +76,11 @@ function TileCandidates({ pendingTileList }) {
                     }}
                 >
                     <img
-                        src={`/tiles/${tileId}.jpg`}
+                        src={`/tiles/ID${tileId*4}.jpg`}
                         alt={tileId}
                         style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        onError={(e) => { e.target.style.display = "none"; }}
+                        //onError={(e) => { e.target.style.display = "none"; }}
+                        onError={(e) => { console.error(`Error loading tile: ${tileId}`); e.target.style.display = "none"; }}
                     />
                 </button>
             ))}
