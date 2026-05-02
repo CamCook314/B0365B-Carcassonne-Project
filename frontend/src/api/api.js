@@ -1,12 +1,34 @@
 const BASE_URL = "http://127.0.0.1:1234";
 
+let history = ["starting history..."];
+let lastState = null;
+
+function addToHistory(endpoint, data) {
+  if (endpoint === "/gamestate" && JSON.stringify(data) === JSON.stringify(lastState)) {
+    return; // skip identical gamestate entries
+  }
+  history.push({ endpoint, data });
+  lastState = data;
+}
+
+export function getHistory() {
+  return history;
+}
+
+export function setHistory(newHistory) {
+  history = newHistory;
+}
+
 export async function getGameState() {
   const res = await fetch(`${BASE_URL}/gamestate`);
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error || "Failed to fetch game state");
   }
-  return res.json();
+  const data = await res.json();
+  addToHistory("/gamestate", data);
+  
+  return data;
 }
 
 export async function startGame(numPlayers) {
@@ -19,7 +41,9 @@ export async function startGame(numPlayers) {
     const err = await res.json();
     throw new Error(err.error || "Failed to start game");
   }
-  return res.json();
+  const data = await res.json();
+  addToHistory("/start", data);
+  return data;
 }
 
 export async function setPendingTile(tileId) {
@@ -32,7 +56,9 @@ export async function setPendingTile(tileId) {
     const err = await res.json();
     throw new Error(err.error || "Failed to set pending tile");
   }
-  return res.json();
+  const data = await res.json();
+  addToHistory("/pending/change", data);
+  return data;
 }
 
 export async function overridePendingTile(tileId) {
@@ -45,7 +71,9 @@ export async function overridePendingTile(tileId) {
     const err = await res.json();
     throw new Error(err.error || "Failed to override pending tile");
   }
-  return res.json();
+  const data = await res.json();
+  addToHistory("/pending/override", data);
+  return data;
 }
 
 
@@ -59,8 +87,22 @@ export async function setPendingTileList(tileIds) {
     const err = await res.json();
     throw new Error(err.error || "Failed to fetch tile list");
   }
-  return res.json();
+  const data = await res.json();
+  addToHistory("/pending/list", data);
+  return data;
 }
+
+export async function setMeeple(row, col, side) {
+  const res = await fetch(`${BASE_URL}/meeple`, {method: "POST"});
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to set meeple");
+  }
+  const data = await res.json();
+  addToHistory("/meeple", data);
+  return data;
+}
+
 
 export async function resetGame() {
   const res = await fetch(`${BASE_URL}/reset`, { method: "POST" });
@@ -68,5 +110,8 @@ export async function resetGame() {
     const err = await res.json();
     throw new Error(err.error || "Failed to reset game");
   }
-  return res.json();
+  const data = await res.json();
+  setHistory([]); // clear history on reset
+  return data;
 }
+

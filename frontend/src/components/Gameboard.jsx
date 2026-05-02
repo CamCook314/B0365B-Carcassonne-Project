@@ -44,6 +44,7 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
       prev && prev.col === tile.col && prev.row === tile.row ? null : tile
     );
     onTileClick?.(tile);
+    console.log("meeples: ", meeples);
   };
 
   return (

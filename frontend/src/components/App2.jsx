@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getGameState, startGame } from "../api/api";
+import { getGameState, startGame, getHistory } from "../api/api";
 import { POLLING_INTERVAL } from "../constants/config";
 import { useGameState } from "../hooks/useGameState";
 import "../css/App2.css";
@@ -10,8 +10,7 @@ import Grid from "./Grid";
 import Header from "./Header";
 
 export default function App2() {
-  const { gameState, loading, error, retry: fetchState, immediateFetch } = useGameState();
-
+  const { gameState, loading, error, retry: fetchState, immediateFetch, history } = useGameState();
   // start a new game
   const handleStart = async (numPlayers) => {
     try {
@@ -41,11 +40,13 @@ export default function App2() {
   const currentPlayer = gameState?.current_player || 0;
   const remaining = gameState?.remaining_pieces || 0;
   const gameOver = gameState?.game_over || false;
+  const meeples = gameState?.meeples || [];
 
   // Pending tile from CV (via API)
   const pendingTile = gameState?.pending_tile || null;
   const validPlacements = gameState?.pending_valid || [];
   const pendingTileList = gameState?.pending_candidates || [];
+
 
   // entry screens for picking player numbers for api
   if (!loading && !gameState) {
@@ -72,11 +73,13 @@ export default function App2() {
         currentPlayer={currentPlayer}
         players={players}
         boardTiles={boardTiles}
+        meeples={meeples}
         validPlacements={validPlacements}
         remaining={remaining}
         currentTurn={currentTurn}
         pendingTile={pendingTile}
         pendingTileList={pendingTileList}
+        history={history}
         refresh={async () => {
           await immediateFetch();
           console.log("Refreshed game state");

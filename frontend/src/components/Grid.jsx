@@ -1,32 +1,23 @@
 import GameBoard from "./Gameboard";
 import Players from "./Players";
 import DetectedTile from "./DetectedTile";
+import { ActivityLog } from "./ActivityLog";
 
-export default function Grid({ currentPlayer, players, boardTiles, validPlacements, remaining, currentTurn, pendingTile, pendingTileList, refresh }) {
+export default function Grid({ currentPlayer, players, boardTiles, meeples, validPlacements, remaining, currentTurn, pendingTile, pendingTileList, history, refresh }) {
   return <div className="grid">
     <div className="col">
       {/* Players */}
       <Players currentPlayer={currentPlayer} players={players} />
 
       {/* Activity Log */}
-      <div className="card card-log">
-        <div className="card-header">
-          <span>Activity Log</span>
-          <span className="card-tag card-tag-gold">RECENT</span>
-        </div>
-        <div className="card-body">
-          <p style={{ fontSize: 12, color: "var(--dim)" }}>
-            Move history will appear here.
-          </p>
-        </div>
-      </div>
+      <ActivityLog history={[]}/>
     </div>
 
     {/* gameboard */}
     <div className="col">
       <GameBoard
         tiles={boardTiles}
-        meeples={[]}
+        meeples={meeples}
         validPlacements={validPlacements}
         onTileClick={(tile) => console.log("Clicked:", tile)} />
 
@@ -69,3 +60,4 @@ export default function Grid({ currentPlayer, players, boardTiles, validPlacemen
     </div>
   </div>;
 }
+
