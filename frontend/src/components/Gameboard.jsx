@@ -84,7 +84,7 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
                     ) : <span style={{ fontSize: 11, color: "var(--dim)" }}>?</span>}
 
                     {(meepleLookup[`${t.col},${t.row}`] || []).map((m, i) => (
-                      <div key={i} className={`meeple meeple-${m.side || "center"}`} style={{ background: PLAYER_COLORS[m.playerIndex] || "#888" }} />
+                      <div key={i} className={`meeple meeple-${m.side || "centre"}`} style={{ background: PLAYER_COLORS[m.playerIndex] || "#888" }} />
                     ))}
                   </div>
                 ))}

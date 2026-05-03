@@ -1,16 +1,32 @@
 import GameBoard from "./Gameboard";
 import Players from "./Players";
 import DetectedTile from "./DetectedTile";
-import { ActivityLog } from "./ActivityLog";
+import MeeplePlacer from "./MeeplePlacer";
 
-export default function Grid({ currentPlayer, players, boardTiles, meeples, validPlacements, remaining, currentTurn, pendingTile, pendingTileList, history, refresh }) {
+export default function Grid({
+  currentPlayer,
+  players,
+  boardTiles,
+  meeples,
+  validPlacements,
+  remaining,
+  currentTurn,
+  pendingTile,
+  pendingTileList,
+  pendingPlacement,
+  refresh,
+}) {
   return <div className="grid">
     <div className="col">
       {/* Players */}
       <Players currentPlayer={currentPlayer} players={players} />
 
-      {/* Activity Log */}
-      <ActivityLog history={[]}/>
+      {/* Meeple Placer (replaces Activity Log) */}
+      <MeeplePlacer
+        pendingPlacement={pendingPlacement}
+        currentPlayer={currentPlayer}
+        players={players}
+      />
     </div>
 
     {/* gameboard */}
@@ -60,4 +76,3 @@ export default function Grid({ currentPlayer, players, boardTiles, meeples, vali
     </div>
   </div>;
 }
-

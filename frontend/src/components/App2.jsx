@@ -31,24 +31,35 @@ export default function App2() {
           tileId: tile.tile_id,
           attribute: tile.attribute,
           meeple_attached: tile.meeple_attached,
+          meeple: tile.meeple,
         };
       })
     : [];
+
+  // Build a flat meeples list for the GameBoard
+  const meeples = boardTiles
+    .filter((t) => t.meeple)
+    .map((t) => ({
+      col: t.col,
+      row: t.row,
+      side: t.meeple.side,
+      playerIndex: t.meeple.player_index,
+    }));
 
   const players = gameState?.players || [];
   const currentTurn = gameState?.current_turn || 0;
   const currentPlayer = gameState?.current_player || 0;
   const remaining = gameState?.remaining_pieces || 0;
   const gameOver = gameState?.game_over || false;
-  const meeples = gameState?.meeples || [];
 
   // Pending tile from CV (via API)
   const pendingTile = gameState?.pending_tile || null;
   const validPlacements = gameState?.pending_valid || [];
   const pendingTileList = gameState?.pending_candidates || [];
 
+  // Pending placement awaiting a meeple decision
+  const pendingPlacement = gameState?.pending_placement || null;
 
-  // entry screens for picking player numbers for api
   if (!loading && !gameState) {
     return <EntryScreen error={error} handleStart={handleStart} />;
   }
@@ -79,6 +90,7 @@ export default function App2() {
         currentTurn={currentTurn}
         pendingTile={pendingTile}
         pendingTileList={pendingTileList}
+        pendingPlacement={pendingPlacement}
         history={history}
         refresh={async () => {
           await immediateFetch();

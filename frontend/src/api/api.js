@@ -92,6 +92,31 @@ export async function setPendingTileList(tileIds) {
   return data;
 }
 
+export async function placeMeeple(direction) {
+  const res = await fetch(`${BASE_URL}/meeple`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ direction }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `meeple failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function skipMeeple() {
+  const res = await fetch(`${BASE_URL}/meeple/skip`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `meeple/skip failed (${res.status})`);
+  }
+  return res.json();
+}
+
 export async function setMeeple(row, col, side) {
   const res = await fetch(`${BASE_URL}/meeple`, {method: "POST"});
   if (!res.ok) {
