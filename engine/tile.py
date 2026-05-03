@@ -31,6 +31,7 @@ class tile:
 		self.feature_continues = feature_continues
 		self.attribute = attribute
 		self.meeple_attached = False
+		self.player_placed = None
 
 	# For tile printing in testing
 	def __repr__(self):

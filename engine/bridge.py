@@ -1,5 +1,5 @@
 """
-bridge.py — Single entry point for the Carcassonne AR system.
+bridge.py - Single entry point for the Carcassonne AR system.
 
 Run with:
     python engine/bridge.py
@@ -49,13 +49,18 @@ def _handle_tile_checked():
     tile_id    = Project_CV.tile_id
     candidates = Project_CV.tile_candidates   # list of (score, tile_id) tuples
 
-    # Send ranked tile IDs only (frontend doesn't need raw scores)
-    candidate_ids = [rid for _, rid in candidates]
+    # Send top 4 alternatives (different family from the pending tile).
+    # Exclude the same family — it's already shown as the main tile preview.
+    pending_family = int(tile_id.replace("ID", "")) // 4
+    candidate_ids = [
+        rid for _, rid in candidates
+        if int(rid.replace("ID", "")) // 4 != pending_family
+    ][:4]
 
-    print(f"[bridge] tile_checked — tile={tile_id}  candidates={candidate_ids[:3]}...")
+    print(f"[bridge] tile_checked - tile={tile_id}  candidates={candidate_ids[:3]}...")
     resp = _post("/pending", {"tile_id": tile_id, "candidates": candidate_ids})
     if resp and "error" not in resp:
-        print(f"[bridge] /pending OK — {len(resp.get('valid_positions', []))} valid positions")
+        print(f"[bridge] /pending OK - {len(resp.get('valid_positions', []))} valid positions")
     else:
         print(f"[bridge] /pending error: {resp}")
 
@@ -67,11 +72,11 @@ def _handle_cv_to_engine():
     grid_coord = Project_CV.grid_coord
     gx, gy     = grid_coord
 
-    print(f"[bridge] cv_to_engine — tile={tile_id}  coord=({gx},{gy})")
+    print(f"[bridge] cv_to_engine - tile={tile_id}  coord=({gx},{gy})")
     resp = _post("/place", {"x": gx, "y": gy, "rotation_id": tile_id})
 
     if resp and resp.get("status") == "ok":
-        print(f"[bridge] /place OK — placed {resp.get('placed')} at {resp.get('position')}")
+        print(f"[bridge] /place OK - placed {resp.get('placed')} at {resp.get('position')}")
         Project_CV.game_response = (True, 1)
     else:
         print(f"[bridge] /place error: {resp}")
@@ -83,10 +88,10 @@ def _handle_cv_to_engine():
 def _handle_meeple_placed():
     colour    = Project_CV.meeple_colour
     direction = Project_CV.meeple_direction
-    print(f"[bridge] meeple_placed — colour={colour}  direction={direction}")
+    print(f"[bridge] meeple_placed - colour={colour}  direction={direction}")
     resp = _post("/meeple", {"colour": colour, "direction": direction})
     if resp and resp.get("status") == "ok":
-        print(f"[bridge] /meeple OK — turn={resp.get('turn')}  player={resp.get('current_player')}")
+        print(f"[bridge] /meeple OK - turn={resp.get('turn')}  player={resp.get('current_player')}")
     else:
         print(f"[bridge] /meeple error: {resp}")
     Project_CV.meeple_placed    = False
@@ -95,10 +100,10 @@ def _handle_meeple_placed():
 
 
 def _handle_meeple_skip():
-    print("[bridge] meeple_skip — calling /meeple/skip")
+    print("[bridge] meeple_skip - calling /meeple/skip")
     resp = _post("/meeple/skip", {})
     if resp and resp.get("status") == "ok":
-        print(f"[bridge] /meeple/skip OK — turn={resp.get('turn')}  player={resp.get('current_player')}")
+        print(f"[bridge] /meeple/skip OK - turn={resp.get('turn')}  player={resp.get('current_player')}")
     else:
         print(f"[bridge] /meeple/skip error: {resp}")
     Project_CV.meeple_skip = False
@@ -107,6 +112,8 @@ def _handle_meeple_skip():
 # ── Thread targets ─────────────────────────────────────────────────────────────
 
 def _run_api():
+    import logging
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
     engine_api.app.run(host="127.0.0.1", port=1234, debug=False, use_reloader=False)
 
 
@@ -130,6 +137,7 @@ def _run_frontend():
 def main():
     print("[bridge] Starting Vite dev server...")
     vite_proc = _run_frontend()
+    print("Website up on port 5173")
 
     print("[bridge] Starting Flask API...")
     threading.Thread(target=_run_api, daemon=True).start()
@@ -140,43 +148,73 @@ def main():
     print("[bridge] Starting CV loop...")
     threading.Thread(target=_run_cv, daemon=True).start()
 
-    print("[bridge] All components running. Polling CV globals...\n")
+    print("[bridge] All components running. Waiting for /start...\n")
 
     try:
-        while True:
-            try:
-                if Project_CV.tile_checked:
-                    _handle_tile_checked()
-
-                if Project_CV.cv_to_engine:
-                    _handle_cv_to_engine()
-
-                if Project_CV.meeple_placed:
-                    _handle_meeple_placed()
-
-                if Project_CV.meeple_skip:
-                    _handle_meeple_skip()
-
-            except Exception as e:
-                print(f"[bridge] Poll error: {e}")
-
+        # Wait for the frontend to POST /start before entering the game loop
+        while engine_api.game_state is None:
             time.sleep(0.1)
+
+        game = engine_api.game_state
+        print(f"[bridge] Game started - {len(game.players)} players.\n")
+
+        while len(engine_api.tile_bag_instance.tile_bag) > 0:
+            for p in game.players: # looping through each player in the game (use p to dictate which player's turn)
+
+                # breaks if there are no pieces left, the game should end
+                if len(engine_api.tile_bag_instance.tile_bag) == 0:
+                    break
+
+                tiles_left = len(engine_api.tile_bag_instance.tile_bag) // 4
+                print(f"[bridge] {p.return_colour()}'s turn - {tiles_left} tiles left")
+
+
+                turn_done = False
+                while not turn_done:
+                    try:
+                        if Project_CV.tile_checked:
+                            _handle_tile_checked()
+
+                        if Project_CV.cv_to_engine:
+                            _handle_cv_to_engine()
+
+                        if Project_CV.meeple_placed:
+                            _handle_meeple_placed()
+                            turn_done = True
+
+                        if Project_CV.meeple_skip:
+                            _handle_meeple_skip()
+                            turn_done = True
+
+                    except Exception as e:
+                        print(f"[bridge] Poll error: {e}")
+
+                    time.sleep(0.1)
+
+        print("[bridge] Tile bag empty - game over")
+
+        # Trigger end-game scoring on the engine and report final scores
+        resp = _post("/end", {})
+        if resp and resp.get("status") == "ok":
+            print(f"[bridge] /end OK - final scores: {resp.get('scores')}")
+        else:
+            print(f"[bridge] /end error: {resp}")
 
     except KeyboardInterrupt:
         print("\n[bridge] Shutting down...")
     finally:
-        # Kill Vite — it's a real subprocess, not a daemon thread, so it survives Ctrl+C
+        # Kill Vite - it's a real subprocess, not a daemon thread, so it survives Ctrl+C
         if vite_proc.poll() is None:
             vite_proc.terminate()
             vite_proc.wait()
             print("[bridge] Vite stopped.")
 
-        # Restore terminal — os.system uses cmd.exe on Windows so stty won't work.
+        # Restore terminal - os.system uses cmd.exe on Windows so stty won't work.
         # subprocess.run finds the Git Bash stty binary via PATH instead.
         try:
             subprocess.run(["stty", "sane"], check=False)
         except FileNotFoundError:
-            pass  # stty not available (pure cmd.exe) — open a new terminal
+            pass  # stty not available (pure cmd.exe) - open a new terminal
 
 
 if __name__ == "__main__":

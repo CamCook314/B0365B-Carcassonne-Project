@@ -1,16 +1,16 @@
 import { useState, useEffect } from "react";
-import { getGameState, startGame } from "../api/api";
+import { getGameState, startGame, getHistory } from "../api/api";
 import { POLLING_INTERVAL } from "../constants/config";
 import { useGameState } from "../hooks/useGameState";
 import "../css/App2.css";
 import EntryScreen from "./EntryScreen";
 import LoadingScreen from "./LoadingScreen";
+import EndScreen from "./EndScreen";
 import Grid from "./Grid";
 import Header from "./Header";
 
 export default function App2() {
-  const { gameState, loading, error, retry: fetchState } = useGameState();
-
+  const { gameState, loading, error, retry: fetchState, immediateFetch, history } = useGameState();
   // start a new game
   const handleStart = async (numPlayers) => {
     try {
@@ -50,6 +50,8 @@ export default function App2() {
   const currentTurn = gameState?.current_turn || 0;
   const currentPlayer = gameState?.current_player || 0;
   const remaining = gameState?.remaining_pieces || 0;
+  const gameOver = gameState?.game_over || false;
+  const meeples = gameState?.meeples || [];
 
   // Pending tile from CV (via API)
   const pendingTile = gameState?.pending_tile || null;
@@ -68,6 +70,12 @@ export default function App2() {
     return <LoadingScreen/>;
   }
 
+  // Game finished — show final scores
+  if (gameOver) {
+    return <EndScreen players={players} onReset={fetchState} />;
+  }
+
+  // Game running
   return (
     <div className="app">
       {/* Header */}
@@ -84,6 +92,11 @@ export default function App2() {
         pendingTile={pendingTile}
         pendingTileList={pendingTileList}
         pendingPlacement={pendingPlacement}
+        history={history}
+        refresh={async () => {
+          await immediateFetch();
+          console.log("Refreshed game state");
+        }}
       />
     </div>
   );

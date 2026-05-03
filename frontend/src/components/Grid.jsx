@@ -1,4 +1,4 @@
-import GameBoard from "./GameBoard";
+import GameBoard from "./Gameboard";
 import Players from "./Players";
 import DetectedTile from "./DetectedTile";
 import MeeplePlacer from "./MeeplePlacer";
@@ -58,7 +58,7 @@ export default function Grid({
 
     <div className="col">
       {/* Detected Tile */}
-      <DetectedTile pendingTile={pendingTile} validPlacements={validPlacements} pendingTileList={pendingTileList} />
+      <DetectedTile pendingTile={pendingTile} validPlacements={validPlacements} pendingTileList={pendingTileList} refresh={refresh} />
 
       {/* Game Stats */}
       <div className="card card-stats">

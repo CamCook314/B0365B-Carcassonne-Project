@@ -33,6 +33,7 @@ pending_tile = None
 pending_valid = []           # list of [x, y, rotation_id]
 pending_candidates = []      # ranked list of tile_id strings from CV top-N matches
 pending_placement = None     # {"x", "y", "tile_id", "tile"} — set by /place, cleared by /meeple or /meeple/skip
+game_over = False            # flipped True by /end after final scoring
 
 
 @app.route('/gamestate', methods=['GET'])
@@ -99,21 +100,24 @@ def get_gamestate():
         "board": board_serialised,
         "players": players_serialised,
         "current_player": game_state.currentIndex,
-        "remaining_pieces": game_state.remaining_pieces,
+        "remaining_pieces": len(tile_bag_instance.tile_bag) // 4 if tile_bag_instance else 0,
         "current_turn": game_state.current_turn,
         "pending_tile": pending_tile,
         "pending_valid": pending_valid,
         "pending_candidates": pending_candidates,
         "pending_placement": pending_placement_serialised,
+        "game_over": game_over,
     })
 
 
 @app.route('/start', methods=['POST'])
 def start_game():
-    global game_state, tile_bag_instance, pending_tile, pending_valid
+    global game_state, tile_bag_instance, pending_tile, pending_valid, game_over
 
     if game_state is not None:
         return jsonify({"error": "Game already started"}), 400
+
+    game_over = False
 
     data = request.get_json()
     if data is None or "players" not in data:
@@ -266,16 +270,19 @@ def place_tile():
     # fall back to the first valid rotation for this position.
     rotation_id = data.get("rotation_id")
     placed_tile_id = None
+    valid_at_pos = [rid for px, py, rid in pending_valid if px == x and py == y]
+    if not valid_at_pos:
+        return jsonify({"error": "Invalid placement position"}), 400
     if rotation_id is not None:
-        valid_at_pos = [rid for px, py, rid in pending_valid if px == x and py == y]
-        if not valid_at_pos:
-            return jsonify({"error": "Invalid placement position"}), 400
-        placed_tile_id = rotation_id
+        if rotation_id in valid_at_pos:
+            placed_tile_id = rotation_id
+        else:
+            # CV rotation detection returned a rotation that doesn't fit — fall back
+            # to the engine-computed valid rotation for this position.
+            placed_tile_id = valid_at_pos[0]
+            print(f"[place] CV rotation {rotation_id} not valid at ({x},{y}) — using {placed_tile_id}")
     else:
-        for px, py, rid in pending_valid:
-            if px == x and py == y:
-                placed_tile_id = rid
-                break
+        placed_tile_id = valid_at_pos[0]
 
     if placed_tile_id is None:
         return jsonify({"error": "Invalid placement"}), 400
@@ -317,6 +324,14 @@ def place_meeple():
     if direction not in ("up", "down", "left", "right", "centre"):
         return jsonify({"error": f"Invalid direction: {direction}"}), 400
 
+    # Convert the request's colour string to the int player.colour uses internally.
+    COLOURS = ["red", "blue", "green", "yellow", "black"]
+    if colour not in COLOURS:
+        return jsonify({"error": f"Invalid colour: {colour}"}), 400
+    colour_int = COLOURS.index(colour)
+    if colour_int != game_state.current_player().colour:
+        return jsonify({"error": f"It is not {colour}'s turn"}), 400
+
     x    = pending_placement["x"]
     y    = pending_placement["y"]
     tile = pending_placement["tile"]
@@ -351,6 +366,16 @@ def place_meeple():
     }
     tile.meeple_attached = dir_to_attached[direction]
     tile.meeple_player_index = current_index
+
+    # Monastery: manage_structures handles player attachment at creation time
+    if direction == "centre" and tile.attribute == 2:
+        game_state.manage_structures(x, y, tile, game_state.current_player())
+    else:
+        game_state.manage_structures(x, y, tile, None)
+        try:
+            game_state.place_meeple(tile, direction, colour_int)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
 
     game_state.next_player()
     game_state.current_turn += 1
@@ -393,15 +418,34 @@ def skip_meeple():
     })
 
 
+@app.route('/end', methods=['POST'])
+def end_game():
+    global game_over
+    if game_state is None:
+        return jsonify({"error": "Game not started"}), 400
+
+    game_state.score_end_game()
+    game_over = True
+
+    return jsonify({
+        "status": "ok",
+        "scores": [
+            {"colour": p.return_colour(), "score": p.score}
+            for p in game_state.players
+        ],
+    })
+
+
 @app.route('/reset', methods=['POST'])
 def reset_game():
-    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement
+    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement, game_over
     game_state = None
     tile_bag_instance = None
     pending_tile = None
     pending_valid = []
     pending_candidates = []
     pending_placement = None
+    game_over = False
     return jsonify({"status": "ok"})
 
 

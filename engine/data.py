@@ -1,6 +1,8 @@
 from tile_set import tile_set
 from tile import tile
+from events import Event
 # Variable declarations
+import random
 
 class player:
 
@@ -33,6 +35,20 @@ class gameStateClass:
 		self.remaining_pieces = 72
 		self.current_turn = 1
 		self.structures = []
+		self.event_pool = []
+		self.extra_turn = False
+		self.unrestCheck = False
+
+		for i in range(4):  # 4 event coords
+			while True:
+				randx = random.randint(-5, 5)
+				randy = random.randint(-5, 5)
+
+				if (randx, randy) not in [e.coords for e in self.event_pool]:
+					self.event_pool.append(Event((randx, randy)))
+					print(Event((randx, randy)))
+					break
+			
 
 	# converts x,y logical coordinates to array indexes using offsets.
 	# x increases going right, y increases going up (standard math axes).
@@ -52,7 +68,7 @@ class gameStateClass:
 		return array_row, array_col
 
 	# expands the board when a tile placement would fall outside the current
-  	# array bounds. works on array indexes after converting from x,y coordinates.
+	# array bounds. works on array indexes after converting from x,y coordinates.
 	def expand_board(self, x, y):
 		array_row, array_col = self.to_array_index(x, y)
 		rows = len(self.board)
@@ -85,6 +101,10 @@ class gameStateClass:
 			for r in self.board:
 				r.extend([None] * 10)
 
+	def extra_turn_event(self): # assuming they take it now
+		self.extra_turn = True
+		
+
 	# x = column (increase goes right), y = row (increase goes up)
 	def place_tile(self, x, y, tile):
 		self.expand_board(x, y)
@@ -93,6 +113,20 @@ class gameStateClass:
 		array_row, array_col = self.to_array_index(x, y)
 		self.board[array_row][array_col] = tile
 		self.remaining_pieces -= 1
+
+		tile.player_placed = self.current_player()
+		for event in self.event_pool:
+			if event.coords == (x, y):
+				event.play(self)
+
+
+	def remove_tile(self, x, y, tile):
+		array_row, array_col = self.to_array_index(x, y)
+		self.board[array_row][array_col] = None
+		self.remaining_pieces += 1
+
+		#tilebag.add(tile) add tile back into tilebag depending on what it can do
+
 
 	#player is None if no meeple added
 	def manage_structures(self, row, col, tile, player=None):
@@ -165,11 +199,18 @@ class gameStateClass:
 			self.structures.append(temp_struct)
 		for structure in self.structures:
 			if structure.check_completed(self.board):
-				structure.score_structure()
+				structure.score_structure(self.unrestCheck)
 				self.structures.remove(structure)
 
 	def next_player(self):
+		if self.extra_turn:
+			self.extra_turn = False
+			return
+		for ev in self.event_pool:
+			if ev.name == "volcano" and ev.active == True:
+				ev.volcano_check(self)
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
+		self.current_turn += 1
 
 	def current_player(self):
 		return self.players[self.currentIndex]
@@ -444,7 +485,7 @@ class structures:
 					break
 		return connections
 
-	def score_structure(self):
+	def score_structure(self, unrest):
 		"""
 		This method scores a structure once it is deemed completed
 		"""
@@ -461,7 +502,11 @@ class structures:
 				temp_score += 1
 				continue
 			elif self.type == 2:
-				if tile.attribute == 1:
+				if tile.attribute == 1 and unrest == True:
+					temp_score += 2
+				else:
+					temp_score += 1
+				if tile.attribute == 1 and unrest == False:
 					temp_score += 4
 				else:
 					temp_score += 2

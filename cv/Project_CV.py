@@ -45,6 +45,8 @@ def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
     board rotation angle, and returns a tight square crop for match_rotation().
     padding < 1.0 intentionally clips tile edges to exclude table and adjacent tiles.
     """
+    if center_px is not None and (center_px[0] is None or center_px[1] is None):
+        center_px = None
     src = center_px if center_px is not None else slot_px
     cx = src[0] / proc_scale
     cy = src[1] / proc_scale
@@ -188,11 +190,12 @@ def cv_main_loop():
     meeple_detect_count  = 0
     meeple_skip_count    = 0
     candidate_meeple_dir = None
+    meeple_baseline      = None
 
     # --- Board growth / removal detection ---
     BOARD_GROWTH_THRESHOLD = 1000   # Min pixel area increase to count as growth
     SAT_GROWTH_THRESHOLD   = 500    # Min new saturation pixels inside board (catches centre tiles)
-    GROWTH_CONFIRM_FRAMES  = 5      # Consecutive frames of growth needed to commit
+    GROWTH_CONFIRM_FRAMES  = 3      # Consecutive frames of growth needed to commit
     REMOVAL_CONFIRM_FRAMES = 4      # Consecutive frames of shrinkage needed to confirm removal
 
     # --- Tile identification stability ---
@@ -209,6 +212,12 @@ def cv_main_loop():
     frame_count     = 0
     set_board       = False
     last_placed_coord = None
+
+    # Origin tile auto-detect + override window
+    FIRST_TILE_CONFIRM_FRAMES = 8    # stable frames before auto-accepting origin
+    first_tile_frame_count    = 0
+    origin_id_pending = False  # True until second tile appears in frame
+    origin_placement  = False  # True when engine comm is for origin tile
 
     growth_frame_count  = 0
     candidate_board_cnt = None
@@ -240,7 +249,7 @@ def cv_main_loop():
 
     global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, grid_origin, grid_tile_size, grid_angle
 
-    print("Place the first tile then click any OpenCV window and press 'b'.")
+    print("Place the first tile on the board — it will be detected automatically. Press 'b' to force-confirm.")
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -270,27 +279,32 @@ def cv_main_loop():
                 rect = cv.minAreaRect(cnt)
                 box  = np.intp(cv.boxPoints(rect))
                 cv.drawContours(result, [box], -1, (0, 255, 255), 2)
-            cv.putText(result, "Press 'b' to set board origin", (10, 30),
+
+            if valid:
+                first_tile_frame_count += 1
+            else:
+                first_tile_frame_count = 0
+
+            auto_trigger = first_tile_frame_count >= FIRST_TILE_CONFIRM_FRAMES
+            status_text  = (f"Tile detected ({first_tile_frame_count}/{FIRST_TILE_CONFIRM_FRAMES})..."
+                            if valid else "Waiting for first tile...")
+            cv.putText(result, status_text, (10, 30),
                        cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-            if set_board and valid:
+            if (set_board or auto_trigger) and valid:
                 first = max(valid, key=cv.contourArea)
                 board_mask      = np.zeros(blobs.shape, dtype=np.uint8)
                 cv.drawContours(board_mask, [first], -1, 255, -1)
                 prev_board_area   = cv.contourArea(first)
                 prev_sat_area     = cv.countNonZero(cv.bitwise_and(sat_blobs, board_mask))
                 stable_board_mask = board_mask.copy()   # Committed baseline for diff
-                set_board         = False
+                set_board              = False
+                first_tile_frame_count = 0
 
                 origin       = mask_centroid(board_mask)
                 grid_tracker = GridTracker(origin)
 
                 # Seed tile size from the origin blob's minAreaRect dimensions.
-                # This is more reliable than using the diff centroid on the second
-                # tile: MORPH_CLOSE fills the gap between adjacent tiles, pulling
-                # the diff centroid ~25% further than the actual tile centre and
-                # making calibrate() overestimate a.  A single solid tile blob is
-                # not significantly expanded by MORPH_CLOSE.
                 rect_f          = cv.minAreaRect(first)
                 (_, _), (rw_f, rh_f), _ = rect_f
                 grid_tracker.a  = float(max(rw_f, rh_f))
@@ -301,23 +315,25 @@ def cv_main_loop():
                 print(f"Board origin set at pixel ({origin[0]:.0f}, {origin[1]:.0f})"
                       f"  tile_size={grid_tracker.a:.0f}px  — identifying first tile.")
 
-                # Identify the origin tile immediately so the engine knows what (0, 0) is.
+                # Identify tile family now so website can show candidates.
+                # Rotation detection and engine communication are deferred by
+                # ORIGIN_OVERRIDE_SECS so the user can override on the website first.
                 crop = extract_tile_crop(frame, first, proc_scale)
                 path = os.path.join(CROPS_DIR, f"tile_{save_count:04d}.png")
                 cv.imwrite(path, crop)
                 print(f"Saved origin tile: {path}")
                 save_count += 1
 
-                results           = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
-                tile_id           = results[0][1]   # bare ID string, e.g. "ID43"
-                tile_candidates   = [(s, rid) for s, rid in results]
-                tile_checked      = True
-                grid_coord        = (0, 0)
-                grid_checked      = True
-                last_placed_coord = (0, 0)   # needed so WAIT_MEEPLE can crop the origin slot
-                print("Origin tile identified — communicating (0, 0).")
+                results         = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
+                tile_id         = results[0][1]
+                tile_candidates = [(s, rid) for s, rid in results]
+                tile_checked    = True
+                last_placed_coord = (0, 0)
+                print("Origin tile identified — override window open.")
                 for score, rid in results[:3]:
                     print(f"  {score:.4f}  {rid}")
+
+                origin_id_pending = True
 
         # ── Board exists ──────────────────────────────────────────────────────
         else:
@@ -343,6 +359,11 @@ def cv_main_loop():
                            cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
                 board_mask = np.zeros(blobs.shape, dtype=np.uint8)
                 cv.drawContours(board_mask, [new_board_cnt], -1, 255, -1)
+
+            # ── Origin override hint ──────────────────────────────────────────
+            if origin_id_pending:
+                cv.putText(result, "Override tile on website, then show next tile",
+                           (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.65, (0, 200, 255), 2)
 
             # ── Phase 1: identify and save the next tile ──────────────────────
             if phase == IDENTIFY:
@@ -370,23 +391,47 @@ def cv_main_loop():
                                cv.FONT_HERSHEY_SIMPLEX, 0.45, colour, 1)
 
                     if tile_frame_count >= TILE_CONFIRM_FRAMES:
-                        crop = extract_tile_crop(frame, candidate_tile_cnt, proc_scale)
-                        path = os.path.join(CROPS_DIR, f"tile_{save_count:04d}.png")
-                        cv.imwrite(path, crop)
-                        print(f"Saved tile: {path}")
-                        save_count           += 1
-                        tile_saved            = True
-                        tile_frame_count      = 0
-                        candidate_tile_cnt    = None
-                        candidate_tile_center = None
-                        phase                 = WAIT_PLACEMENT
-                        results         = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
-                        tile_id         = results[0][1]
-                        tile_candidates = [(s, rid) for s, rid in results]
-                        tile_checked    = True
-                        print("Tile identified — waiting for it to be placed on the board.")
-                        for score, rid in results[:3]:
-                            print(f"  {score:.4f}  {rid}")
+                        if origin_id_pending:
+                            # Second tile is stable — commit origin tile now before identifying it.
+                            family_id        = tile_id_override if tile_id_override is not None else tile_id
+                            tile_id_override = None
+                            board_angle      = np.degrees(np.arctan2(grid_tracker.b, grid_tracker.a))
+                            placed_crop      = crop_placed_slot(
+                                frame, tuple(grid_tracker.origin_px), grid_tracker.tile_size_px,
+                                proc_scale, board_angle_deg=board_angle)
+                            placed_path = os.path.join(CROPS_DIR, f"placed_{save_count - 1:04d}.png")
+                            cv.imwrite(placed_path, placed_crop)
+                            print(f"Rotation detection for origin tile (family {family_id}):")
+                            tile_id = image_match.match_rotation(
+                                placed_path, model, preprocess, embeddings, family_id, bias=bias)
+                            print(f"  → {tile_id}")
+                            meeple_baseline   = proc_frame.copy()
+                            grid_coord        = (0, 0)
+                            grid_checked      = True
+                            origin_id_pending = False
+                            origin_placement  = True
+                            print("Origin tile — communicating (0, 0).")
+                            # Don't identify the second tile yet; engine comm fires at
+                            # end of this frame, then auto-skip meeple, then loop back
+                            # to IDENTIFY to handle the second tile normally.
+                        else:
+                            crop = extract_tile_crop(frame, candidate_tile_cnt, proc_scale)
+                            path = os.path.join(CROPS_DIR, f"tile_{save_count:04d}.png")
+                            cv.imwrite(path, crop)
+                            print(f"Saved tile: {path}")
+                            save_count           += 1
+                            tile_saved            = True
+                            tile_frame_count      = 0
+                            candidate_tile_cnt    = None
+                            candidate_tile_center = None
+                            phase                 = WAIT_PLACEMENT
+                            results         = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
+                            tile_id         = results[0][1]
+                            tile_candidates = [(s, rid) for s, rid in results]
+                            tile_checked    = True
+                            print("Tile identified — waiting for it to be placed on the board.")
+                            for score, rid in results[:3]:
+                                print(f"  {score:.4f}  {rid}")
 
                 elif candidate_tile_center is None:
                     tile_frame_count = 0
@@ -524,7 +569,11 @@ def cv_main_loop():
                                 phase                = WAIT_MEEPLE
                                 meeple_frame_count   = 0
                                 meeple_detect_count  = 0
+                                meeple_skip_count    = 0
                                 candidate_meeple_dir = None
+                                # Baseline captured NOW — tile just confirmed, arm has cleared,
+                                # same moment the placed crop is taken for rotation detection.
+                                meeple_baseline      = proc_frame.copy()
 
                                 # Compute the actual observed tile centroid from saturation
                                 # pixels — more accurate than the grid-predicted slot centre,
@@ -548,18 +597,35 @@ def cv_main_loop():
                                 last_placed_coord = best_slot
                                 print(f"Tile placed at grid {best_slot} — ready for next tile.")
 
+                                # Recompute slot centre using the refitted grid model.
+                                # The pre-refit slot_px can be off before enough tiles exist
+                                # for a reliable fit; post-refit is always at least as good.
+                                refitted_px = grid_tracker.grid_to_px(*best_slot)
+
+                                # Validate the observed centroid against the refitted prediction.
+                                # Only accept it when within 1 tile — anything further is bad
+                                # data (phantom diff blob, wrong mask, etc.).
+                                validated_center = None
+                                if use_cx is not None and use_cy is not None:
+                                    dist = float(np.hypot(use_cx - refitted_px[0],
+                                                          use_cy - refitted_px[1]))
+                                    if dist <= grid_tracker.tile_size_px:
+                                        validated_center = (use_cx, use_cy)
+                                        print(f"  [crop] centroid accepted ({dist:.0f}px from grid)")
+                                    else:
+                                        print(f"  [crop] centroid rejected ({dist:.0f}px from grid)"
+                                              f" — using refitted grid {refitted_px}")
+
                                 # Post-placement rotation detection.
-                                # Crop using the observed centroid (not the grid prediction) so
-                                # the tile is well-centred even when the grid fit isn't perfect.
                                 if tile_id is not None:
                                     family_id    = tile_id_override if tile_id_override is not None else tile_id
                                     tile_id_override = None
                                     board_angle  = np.degrees(
                                         np.arctan2(grid_tracker.b, grid_tracker.a))
                                     placed_crop  = crop_placed_slot(
-                                        frame, slot_px, grid_tracker.tile_size_px,
+                                        frame, refitted_px, grid_tracker.tile_size_px,
                                         proc_scale, board_angle,
-                                        center_px=(use_cx, use_cy))
+                                        center_px=validated_center)
                                     placed_path  = os.path.join(
                                         CROPS_DIR, f"placed_{save_count - 1:04d}.png")
                                     cv.imwrite(placed_path, placed_crop)
@@ -581,8 +647,8 @@ def cv_main_loop():
                     else:
                         if growth_frame_count > 0:
                             non_growth_count += 1
-                            if non_growth_count >= 2:
-                                # Two consecutive non-growth frames: genuine transient.
+                            if non_growth_count >= 3:
+                                # Three consecutive non-growth frames: genuine transient.
                                 growth_frame_count  = 0
                                 non_growth_count    = 0
                                 candidate_board_cnt = None
@@ -598,7 +664,8 @@ def cv_main_loop():
                            (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
 
                 slot_px = grid_tracker.grid_to_px(*last_placed_coord)
-                colour, direction = detect_meeple(proc_frame, slot_px, grid_tracker.tile_size_px)
+                colour, direction = detect_meeple(proc_frame, slot_px, grid_tracker.tile_size_px,
+                                                  baseline_frame=meeple_baseline)
 
                 if colour is not None:
                     # Meeple visible — require N stable consecutive frames
@@ -703,18 +770,30 @@ def cv_main_loop():
             grid_coord = None
 
             if is_valid:
-                tile_id              = None
-                phase                = WAIT_MEEPLE
-                meeple_frame_count   = 0
-                meeple_detect_count  = 0
-                meeple_skip_count    = 0
-                candidate_meeple_dir = None
-                print("Placement accepted — entering WAIT_MEEPLE.")
+                tile_id = None
+                if origin_placement:
+                    # No meeple on the first tile — auto-skip and go straight back to IDENTIFY.
+                    origin_placement = False
+                    phase            = IDENTIFY
+                    tile_saved       = False
+                    meeple_skip      = True
+                    print("Origin tile accepted — auto-skipping meeple, returning to IDENTIFY.")
+                    while meeple_skip:
+                        time.sleep(0.05)
+                else:
+                    phase                = WAIT_MEEPLE
+                    meeple_frame_count   = 0
+                    meeple_detect_count  = 0
+                    meeple_skip_count    = 0
+                    candidate_meeple_dir = None
+                    # meeple_baseline already set at placement detection time — don't clobber it
+                    print("Placement accepted — entering WAIT_MEEPLE.")
             else:
                 grid_tracker.restore()
-                prev_board_area = rollback_prev_board_area
-                prev_sat_area = rollback_prev_sat_area
+                prev_board_area   = rollback_prev_board_area
+                prev_sat_area     = rollback_prev_sat_area
                 last_placed_coord = rollback_last_coord
+                stable_board_mask = rollback_stable_board_mask
                 tile_saved = True
                 phase = INVALID_DISPLAY
                 removal_frame_count = 0

@@ -1,8 +1,7 @@
-import { useState } from "react";
-import { setPendingTile } from "../api/api.js";
+import { overridePendingTile } from "../api/api.js";
+import { useGameState } from "../hooks/useGameState";
 
-
-export default function DetectedTile({ pendingTile, validPlacements, pendingTileList }) {
+export default function DetectedTile({ pendingTile, validPlacements, pendingTileList, refresh }) {
   return <div className="card card-detect">
     <div className="card-header">
       <span>Detected Tile</span>
@@ -15,11 +14,12 @@ export default function DetectedTile({ pendingTile, validPlacements, pendingTile
     <CardBody 
         pendingTile={pendingTile} 
         validPlacements={validPlacements} 
-        pendingTileList={pendingTileList} />
+        pendingTileList={pendingTileList} 
+        refresh={refresh} />
   </div>;
 }
 
-function CardBody({ pendingTile, validPlacements, pendingTileList }) {
+function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
     return <div className="card-body" style={{ textAlign: "center" }}>
         {pendingTile ? (
             <>
@@ -48,7 +48,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList }) {
                     {validPlacements.length} valid placement
                     {validPlacements.length !== 1 ? "s" : ""}
                 </div>
-                <TileCandidates pendingTileList={pendingTileList} />
+                <TileCandidates pendingTileList={pendingTileList} refresh={refresh} />
             </>
         ) : (
             <>
@@ -59,34 +59,35 @@ function CardBody({ pendingTile, validPlacements, pendingTileList }) {
     </div>; 
 }
 
-function TileCandidates({ pendingTileList }) {
-    // unused?
-    const [pendingInput, setPendingInput] = useState(0);
-    
+function TileCandidates({ pendingTileList, refresh }) {
     return (
-        <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "center" }}>
-            { /* iterate through ids for each button */ }
+        <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
             {pendingTileList.map((tileId, index) => (
                 <button
-                key={index}
-                onClick={() => setPendingTile(Number(tileId))}
-                style={{
-                padding: "1px 1px",
-                background: "none",
-                color: "var(--bg)",
-                width: 50,
-                height: 50
-                }}>
-                <img
-                    src={`/tiles/ID${tileId*4}.jpg`}
-                    alt={`ID${tileId*4}.jpg`}
-                    style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
+                    key={index}
+                    onClick={() => {
+                        overridePendingTile(tileId);
+                        refresh();
                     }}
-                />
-        </button> 
-      ))}
-    </div>
-)}
+                    style={{
+                        padding: "1px 1px",
+                        background: "none",
+                        color: "var(--bg)",
+                        width: 50,
+                        height: 50,
+                        border: "none",
+                        cursor: "pointer",
+                    }}
+                >
+                    <img
+                        src={`/tiles/ID${tileId*4}.jpg`}
+                        alt={tileId}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        //onError={(e) => { e.target.style.display = "none"; }}
+                        onError={(e) => { console.error(`Error loading tile: ${tileId}`); e.target.style.display = "none"; }}
+                    />
+                </button>
+            ))}
+        </div>
+    );
+}

@@ -1,18 +1,21 @@
-import { useState, useCallback, useEffect } from 'react';
-import { getGameState } from '../api/api.js';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { getGameState, getHistory } from '../api/api.js';
 import { POLLING_INTERVAL } from '../constants/config.js';
 
 export function useGameState() {
   const [gameState, setGameState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+  const [history, setHistory] = useState([]);
 
+  const pollingRef = useRef(null);
 
-  const fetchState = async () => {
+  const fetchState = useCallback(async () => {
     try {
       const data = await getGameState();
+      const historyData = await getHistory();
       setGameState(data);
+      setHistory(historyData);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -20,13 +23,21 @@ export function useGameState() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+
+  const immediateFetch = useCallback(async () => {
+    clearInterval(pollingRef.current);
+    pollingRef.current = null;
+    await fetchState();
+  }, [fetchState]);
 
   useEffect(() => {
     fetchState();
-    const interval = setInterval(fetchState, POLLING_INTERVAL);
-    return () => clearInterval(interval);
+    pollingRef.current = setInterval(fetchState, POLLING_INTERVAL);
+    return () => clearInterval(pollingRef.current);
   }, [fetchState]);
 
-  return { gameState, loading, error, retry: fetchState };
+  return { gameState, loading, error, retry: fetchState, immediateFetch, history };
 }
+
