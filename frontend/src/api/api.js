@@ -115,6 +115,8 @@ export async function skipMeeple() {
     throw new Error(err.error || `meeple/skip failed (${res.status})`);
   }
   return res.json();
+}
+
 export async function setMeeple(row, col, side) {
   const res = await fetch(`${BASE_URL}/meeple`, {method: "POST"});
   if (!res.ok) {

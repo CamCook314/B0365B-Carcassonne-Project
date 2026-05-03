@@ -8,6 +8,20 @@ from tile_set import tile_set
 import tile_bag
 from OldMain import (initialiseBoard, get_valid_placements_all_rotations, STARTING_RIVER)
 
+# Startup sanity check: refuse to start if data.py has an old place_meeple
+# signature, so the developer sees the real problem instead of silent
+# corruption (e.g. meeples rendering in the wrong position).
+import inspect
+from data import gameStateClass as _gs
+_pm_params = list(inspect.signature(_gs.place_meeple).parameters)
+if _pm_params != ["self", "tile", "direction"]:
+    raise RuntimeError(
+        f"data.py is out of date.\n"
+        f"  Found:    place_meeple{inspect.signature(_gs.place_meeple)}\n"
+        f"  Expected: place_meeple(self, tile, direction)\n"
+        f"Replace engine/data.py with the latest version."
+    )
+
 app = Flask(__name__)
 app.json.sort_keys = False
 CORS(app)
@@ -57,7 +71,16 @@ def get_gamestate():
                 "player_index": getattr(t, "meeple_player_index", None),
             }
         elif t.meeple_attached is True:
-            meeple_info = {"side": "centre", "player_index": getattr(t, "meeple_player_index", None)}
+            # Defensive: meeple_attached should always be a tuple after
+            # /meeple runs. If it's just True, an old code path overwrote
+            # the direction info. Surface this as a warning rather than
+            # silently rendering the meeple in the wrong (centre) position.
+            print(f"[gamestate] WARNING: tile at ({x},{y}) has meeple_attached=True "
+                  f"(no direction info)", file=sys.stderr)
+            meeple_info = {
+                "side": "unknown",
+                "player_index": getattr(t, "meeple_player_index", None),
+            }
 
         board_serialised[f"{x},{y}"] = {
             "up": t.up,
@@ -324,13 +347,17 @@ def place_meeple():
     if direction not in ("up", "down", "left", "right", "centre"):
         return jsonify({"error": f"Invalid direction: {direction}"}), 400
 
-    # Convert the request's colour string to the int player.colour uses internally.
+    colour = data.get("colour")
     COLOURS = ["red", "blue", "green", "yellow", "black"]
-    if colour not in COLOURS:
-        return jsonify({"error": f"Invalid colour: {colour}"}), 400
-    colour_int = COLOURS.index(colour)
-    if colour_int != game_state.current_player().colour:
-        return jsonify({"error": f"It is not {colour}'s turn"}), 400
+    colour_int = None
+    if colour is not None:
+        if colour not in COLOURS:
+            return jsonify({"error": f"Invalid colour: {colour}"}), 400
+        colour_int = COLOURS.index(colour)
+        if colour_int != game_state.currentIndex:
+            return jsonify({
+                "error": f"It is not {colour}'s turn (current player is index {game_state.currentIndex})"
+            }), 400
 
     x    = pending_placement["x"]
     y    = pending_placement["y"]
@@ -347,6 +374,7 @@ def place_meeple():
     current_index = game_state.currentIndex
     if current_player.meeples <= 0:
         return jsonify({"error": "No meeples left for this player"}), 400
+
 
     if not pending_placement.get("structures_managed"):
         game_state.manage_structures(x, y, tile, None)
@@ -367,16 +395,6 @@ def place_meeple():
     tile.meeple_attached = dir_to_attached[direction]
     tile.meeple_player_index = current_index
 
-    # Monastery: manage_structures handles player attachment at creation time
-    if direction == "centre" and tile.attribute == 2:
-        game_state.manage_structures(x, y, tile, game_state.current_player())
-    else:
-        game_state.manage_structures(x, y, tile, None)
-        try:
-            game_state.place_meeple(tile, direction, colour_int)
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 400
-
     game_state.next_player()
     game_state.current_turn += 1
     pending_placement = None
@@ -384,6 +402,7 @@ def place_meeple():
     return jsonify({
         "status": "ok",
         "meeple_direction": direction,
+        "meeple_colour": colour,
         "player_index": current_index,
         "turn": game_state.current_turn,
         "current_player": game_state.currentIndex,

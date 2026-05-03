@@ -14,6 +14,7 @@ export default function Grid({
   pendingTile,
   pendingTileList,
   pendingPlacement,
+  refresh,
 }) {
   return <div className="grid">
     <div className="col">

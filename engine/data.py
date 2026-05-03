@@ -224,40 +224,37 @@ class gameStateClass:
 		if player.meeples <= 0:
 			raise ValueError("No meeples left")
 
-		# Monastery meeple goes in the centre
+		# Monastery meeple goes in the centre 
 		if direction == "centre":
 			if tile.attribute != 2:
 				raise ValueError("Centre meeple only valid on monastery tiles")
-			player.meeples -= 1
-			# Find the monastery structure for this tile and attach player
 			for structure in self.structures:
-				if structure.type == 3:
-					for t, _r, _c in structure.tiles_used:
-						if t is tile:
-							structure.add_player(player)
-							return
-			return
+				if structure.type != 3:
+					continue
+				for entry in structure.tiles_used:
+					t = entry[0] if isinstance(entry, tuple) else entry
+					if t is tile:
+						structure.add_player(player)
+						player.meeples -= 1
+						return
+			raise ValueError("Could not find monastery structure for this tile")
 
-		# Edge meeple — find the structure that owns this tile+direction edge
+		# Edge meeple
+		edge_value = getattr(tile, direction)
+		if edge_value not in (1, 2):
+			raise ValueError(f"No road or city on side '{direction}'")
+
 		for structure in self.structures:
-			if structure.type == 3:
+			if structure.type != edge_value:
 				continue
-			# Edge could be in structure.edges if the edge is still open,
-			# or it might already have been merged in. Either way, if the
-			# tile is part of the structure AND the relevant side matches
-			# the structure's type, this is the right one.
-			edge_value = getattr(tile, direction)
-			if edge_value != structure.type:
-				continue
-			for t, _r, _c in structure.tiles_used:
+			for entry in structure.tiles_used:
+				t = entry[0] if isinstance(entry, tuple) else entry
 				if t is tile:
 					structure.add_player(player)
 					player.meeples -= 1
 					return
 
-		# No matching structure — silently no-op so we don't crash the turn.
-		# (This shouldn't happen if the frontend only offers valid sides.)
-		print(f"[place_meeple] No structure found for tile direction={direction}")
+		raise ValueError(f"No {('road' if edge_value == 1 else 'city')} structure found containing this tile")
 
 
 	def check_valid_placement(self, x, y, tile):
