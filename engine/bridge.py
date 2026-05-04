@@ -55,7 +55,7 @@ def _handle_tile_checked():
     candidate_ids = [
         rid for _, rid in candidates
         if int(rid.replace("ID", "")) // 4 != pending_family
-    ][:4]
+    ][:10]
 
     print(f"[bridge] tile_checked - tile={tile_id}  candidates={candidate_ids[:3]}...")
     resp = _post("/pending", {"tile_id": tile_id, "candidates": candidate_ids})
@@ -94,6 +94,13 @@ def _handle_meeple_placed():
         print(f"[bridge] /meeple OK - turn={resp.get('turn')}  player={resp.get('current_player')}")
     else:
         print(f"[bridge] /meeple error: {resp}")
+        # Fall back to skip so the game state stays consistent (e.g. colour mismatch)
+        print("[bridge] /meeple failed — falling back to /meeple/skip")
+        skip_resp = _post("/meeple/skip", {})
+        if skip_resp and skip_resp.get("status") == "ok":
+            print(f"[bridge] /meeple/skip fallback OK - turn={skip_resp.get('turn')}")
+        else:
+            print(f"[bridge] /meeple/skip fallback error: {skip_resp}")
     Project_CV.meeple_placed    = False
     Project_CV.meeple_colour    = None
     Project_CV.meeple_direction = None
@@ -169,7 +176,9 @@ def main():
                 print(f"[bridge] {p.return_colour()}'s turn - {tiles_left} tiles left")
 
 
-                turn_done = False
+                turn_done        = False
+                tile_just_placed = False  # True after /place accepted, until meeple resolved
+
                 while not turn_done:
                     try:
                         if Project_CV.tile_checked:
@@ -177,14 +186,28 @@ def main():
 
                         if Project_CV.cv_to_engine:
                             _handle_cv_to_engine()
+                            # If the engine accepted the placement, pending_placement is now set.
+                            # Track this so we can detect when the website resolves the meeple.
+                            tile_just_placed = engine_api.pending_placement is not None
 
-                        if Project_CV.meeple_placed:
+                        # Website button pressed: pending_placement cleared without CV flags being set
+                        if tile_just_placed and engine_api.pending_placement is None:
+                            print("[bridge] Meeple/skip handled via website — unblocking CV.")
+                            Project_CV.meeple_placed  = False   # clear in case safety also fired
+                            Project_CV.meeple_skip    = False
+                            Project_CV.meeple_handled = True
+                            turn_done        = True
+                            tile_just_placed = False
+
+                        elif Project_CV.meeple_placed:
                             _handle_meeple_placed()
-                            turn_done = True
+                            turn_done        = True
+                            tile_just_placed = False
 
-                        if Project_CV.meeple_skip:
+                        elif Project_CV.meeple_skip:
                             _handle_meeple_skip()
-                            turn_done = True
+                            turn_done        = True
+                            tile_just_placed = False
 
                     except Exception as e:
                         print(f"[bridge] Poll error: {e}")

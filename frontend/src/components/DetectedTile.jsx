@@ -61,30 +61,38 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
 
 function TileCandidates({ pendingTileList, refresh }) {
     return (
-        <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+        <div style={{
+            marginTop: 16,
+            maxHeight: 220,
+            overflowY: "auto",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            justifyContent: "center",
+        }}>
             {pendingTileList.map((tileId, index) => (
                 <button
                     key={index}
+                    title={tileId}
                     onClick={() => {
                         overridePendingTile(tileId);
                         refresh();
                     }}
                     style={{
-                        padding: "1px 1px",
+                        padding: 0,
                         background: "none",
-                        color: "var(--bg)",
                         width: 50,
                         height: 50,
                         border: "none",
                         cursor: "pointer",
+                        flexShrink: 0,
                     }}
                 >
                     <img
-                        src={`/tiles/ID${tileId*4}.jpg`}
+                        src={`/tiles/${tileId}.jpg`}
                         alt={tileId}
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        //onError={(e) => { e.target.style.display = "none"; }}
-                        onError={(e) => { console.error(`Error loading tile: ${tileId}`); e.target.style.display = "none"; }}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 3 }}
+                        onError={(e) => { e.target.style.display = "none"; }}
                     />
                 </button>
             ))}

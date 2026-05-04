@@ -259,17 +259,17 @@ def change_pending():
 
     print(f"received tile: {selected_tile}")
 
-    success, result = _resolve_pending(selected_tile)
+    result, err = _resolve_pending(selected_tile)
 
-    if not success:
-        return jsonify({"error": result}), 400
+    if err:
+        return jsonify({"error": err}), 400
 
     return jsonify(result)
 
 
 @app.route('/pending/clear', methods=['POST'])
 def clear_pending():
-    global pending_tile, pending_valid, pending_candidatesw
+    global pending_tile, pending_valid, pending_candidates
     pending_tile = None
     pending_valid = []
     pending_candidates = []

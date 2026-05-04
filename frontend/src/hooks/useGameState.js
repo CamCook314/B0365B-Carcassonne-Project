@@ -28,8 +28,8 @@ export function useGameState() {
 
   const immediateFetch = useCallback(async () => {
     clearInterval(pollingRef.current);
-    pollingRef.current = null;
     await fetchState();
+    pollingRef.current = setInterval(fetchState, POLLING_INTERVAL);
   }, [fetchState]);
 
   useEffect(() => {

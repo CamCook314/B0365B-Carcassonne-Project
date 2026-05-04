@@ -13,7 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cv import image_match
 from cv.blob_pipeline import process_frame, mask_centroid, find_contours, classify_contours
 from cv.grid_tracker import GridTracker
-from cv.meeple_detector import detect_meeple
+from cv.meeple_detector import detect_meeple, CROP_HALF_FRAC
 import time
 
 # --- Communication globals ---
@@ -33,6 +33,7 @@ meeple_placed     = False        # CV sets when meeple detected; bridge clears a
 meeple_colour     = None         # "red","blue","green","yellow","black"
 meeple_direction  = None         # "up","down","left","right","centre"
 meeple_skip       = False        # CV sets on timeout/skip; bridge clears after POST /meeple/skip
+meeple_handled    = False        # Set by bridge when website button handled the meeple/skip
 
 
 def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
@@ -171,7 +172,7 @@ def cv_main_loop():
     DISP_W = int(user32.GetSystemMetrics(0) * 0.75)
     DISP_H = int(user32.GetSystemMetrics(1) * 0.75)
 
-    DISPLAY_EVERY_N_FRAMES = 10
+    DISPLAY_EVERY_N_FRAMES = 1
     CROPS_DIR = os.path.join(os.path.dirname(__file__), "tile_crops")
     os.makedirs(CROPS_DIR, exist_ok=True)
 
@@ -182,24 +183,28 @@ def cv_main_loop():
     INVALID_DISPLAY = "invalid_display" # Engine rejected — show warning, wait for removal
 
     # --- Meeple detection ---
-    MEEPLE_CONFIRM_FRAMES = 3    # Consecutive frames with meeple to commit
-    MEEPLE_SKIP_FRAMES    = 3    # Consecutive frames with a new unplaced tile to skip
-    MEEPLE_SAFETY_FRAMES  = 60   # Hard safety timeout (~60s) in case neither fires
+    MEEPLE_BASELINE_SETTLE = 60   # Frames to roll baseline before locking (~2s); arm must clear
+    MEEPLE_CONFIRM_FRAMES  = 30   # Consecutive frames with meeple to commit     (~1s at 30fps)
+    MEEPLE_SKIP_FRAMES     = 30   # Consecutive frames with a new unplaced tile to skip (~1s)
+    MEEPLE_SAFETY_FRAMES   = 600  # Hard safety timeout (~20s) in case neither fires
 
-    meeple_frame_count   = 0
-    meeple_detect_count  = 0
-    meeple_skip_count    = 0
-    candidate_meeple_dir = None
-    meeple_baseline      = None
+    meeple_frame_count      = 0
+    meeple_detect_count     = 0
+    meeple_skip_count       = 0
+    candidate_meeple_dir    = None
+    candidate_meeple_colour = None
+    meeple_baseline         = None
+    meeple_dbg              = None   # debug dict from detect_meeple; shown in top panels
 
     # --- Board growth / removal detection ---
-    BOARD_GROWTH_THRESHOLD = 1000   # Min pixel area increase to count as growth
-    SAT_GROWTH_THRESHOLD   = 500    # Min new saturation pixels inside board (catches centre tiles)
-    GROWTH_CONFIRM_FRAMES  = 3      # Consecutive frames of growth needed to commit
-    REMOVAL_CONFIRM_FRAMES = 4      # Consecutive frames of shrinkage needed to confirm removal
+    BOARD_GROWTH_THRESHOLD  = 1000   # Min pixel area increase to count as growth
+    SAT_GROWTH_THRESHOLD    = 500    # Min new saturation pixels inside board (catches centre tiles)
+    GROWTH_CONFIRM_FRAMES     = 30   # Consecutive frames of growth needed to commit    (~1s at 30fps)
+    REMOVAL_CONFIRM_FRAMES    = 40   # Consecutive frames of shrinkage to confirm removal (~1.3s)
+    PLACEMENT_COOLDOWN_FRAMES = 120  # Frames to ignore growth after identification (~4s); lets player move tile
 
     # --- Tile identification stability ---
-    TILE_CONFIRM_FRAMES = 4    # Frames the unplaced tile must stay still before saving
+    TILE_CONFIRM_FRAMES = 40   # Frames the unplaced tile must stay still before saving (~1.3s at 30fps)
     TILE_STABLE_DIST    = 20   # Max pixel movement still considered stable
 
     # --- State ---
@@ -214,15 +219,16 @@ def cv_main_loop():
     last_placed_coord = None
 
     # Origin tile auto-detect + override window
-    FIRST_TILE_CONFIRM_FRAMES = 8    # stable frames before auto-accepting origin
+    FIRST_TILE_CONFIRM_FRAMES = 80   # stable frames before auto-accepting origin (~2.7s at 30fps)
     first_tile_frame_count    = 0
     origin_id_pending = False  # True until second tile appears in frame
     origin_placement  = False  # True when engine comm is for origin tile
 
-    growth_frame_count  = 0
-    candidate_board_cnt = None
-    pre_growth_mask     = None
-    removal_frame_count = 0
+    growth_frame_count    = 0
+    candidate_board_cnt   = None
+    pre_growth_mask       = None
+    removal_frame_count   = 0
+    placement_cooldown    = 0   # counts down after identification; growth ignored until 0
 
     tile_frame_count      = 0
     candidate_tile_cnt    = None
@@ -247,7 +253,7 @@ def cv_main_loop():
     # the growth counter, so one flickering frame doesn't undo 2+ growth frames.
     non_growth_count = 0
 
-    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, grid_origin, grid_tile_size, grid_angle
+    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, grid_origin, grid_tile_size, grid_angle
 
     print("Place the first tile on the board — it will be detected automatically. Press 'b' to force-confirm.")
 
@@ -425,6 +431,7 @@ def cv_main_loop():
                             candidate_tile_cnt    = None
                             candidate_tile_center = None
                             phase                 = WAIT_PLACEMENT
+                            placement_cooldown    = PLACEMENT_COOLDOWN_FRAMES
                             results         = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
                             tile_id         = results[0][1]
                             tile_candidates = [(s, rid) for s, rid in results]
@@ -438,7 +445,12 @@ def cv_main_loop():
 
             # ── Phase 2: wait for board blob to grow ──────────────────────────
             elif phase == WAIT_PLACEMENT:
-                if new_board_cnt is not None:
+                if placement_cooldown > 0:
+                    placement_cooldown -= 1
+                    remaining_cd = placement_cooldown
+                    cv.putText(result, f"Move tile to board ({remaining_cd} frames)...",
+                               (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
+                elif new_board_cnt is not None:
                     current_board_area = cv.contourArea(new_board_cnt)
                     sat_in_board       = cv.countNonZero(cv.bitwise_and(sat_blobs, board_mask))
                     contour_growth     = current_board_area - prev_board_area > BOARD_GROWTH_THRESHOLD
@@ -566,11 +578,12 @@ def cv_main_loop():
                                 prev_sat_area   = cv.countNonZero(
                                     cv.bitwise_and(sat_blobs, stable_board_mask))
                                 tile_saved           = False
-                                phase                = WAIT_MEEPLE
-                                meeple_frame_count   = 0
-                                meeple_detect_count  = 0
-                                meeple_skip_count    = 0
-                                candidate_meeple_dir = None
+                                phase                   = WAIT_MEEPLE
+                                meeple_frame_count      = 0
+                                meeple_detect_count     = 0
+                                meeple_skip_count       = 0
+                                candidate_meeple_dir    = None
+                                candidate_meeple_colour = None
                                 # Baseline captured NOW — tile just confirmed, arm has cleared,
                                 # same moment the placed crop is taken for rotation detection.
                                 meeple_baseline      = proc_frame.copy()
@@ -647,7 +660,7 @@ def cv_main_loop():
                     else:
                         if growth_frame_count > 0:
                             non_growth_count += 1
-                            if non_growth_count >= 3:
+                            if non_growth_count >= 30:
                                 # Three consecutive non-growth frames: genuine transient.
                                 growth_frame_count  = 0
                                 non_growth_count    = 0
@@ -660,56 +673,98 @@ def cv_main_loop():
             # ── Phase 3: wait for meeple or player skip ───────────────────────
             elif phase == WAIT_MEEPLE:
                 meeple_frame_count += 1
-                cv.putText(result, "Waiting for meeple...",
-                           (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
 
                 slot_px = grid_tracker.grid_to_px(*last_placed_coord)
-                colour, direction = detect_meeple(proc_frame, slot_px, grid_tracker.tile_size_px,
-                                                  baseline_frame=meeple_baseline)
 
-                if colour is not None:
-                    # Meeple visible — require N stable consecutive frames
-                    if direction == candidate_meeple_dir:
-                        meeple_detect_count += 1
-                    else:
-                        candidate_meeple_dir = direction
-                        meeple_detect_count  = 1
-                    meeple_skip_count = 0   # reset skip counter while meeple present
-                    print(f"  [meeple] colour={colour}  dir={direction}  "
-                          f"stable={meeple_detect_count}/{MEEPLE_CONFIRM_FRAMES}")
-                    if meeple_detect_count >= MEEPLE_CONFIRM_FRAMES:
-                        print(f"Meeple confirmed: {colour} at {direction}.")
-                        meeple_colour    = colour
-                        meeple_direction = direction
-                        meeple_placed    = True
+                # Draw crop region on result so position is always visible
+                cx_m  = int(slot_px[0]);  cy_m = int(slot_px[1])
+                half_m = int(grid_tracker.tile_size_px * CROP_HALF_FRAC)
+                cv.rectangle(result,
+                             (cx_m - half_m, cy_m - half_m),
+                             (cx_m + half_m, cy_m + half_m),
+                             (255, 0, 255), 2)
+
+                if meeple_frame_count <= MEEPLE_BASELINE_SETTLE:
+                    # Rolling baseline — keep updating until arm has fully cleared
+                    meeple_baseline = proc_frame.copy()
+                    meeple_dbg      = None
+                    cv.putText(result,
+                               f"Settling baseline ({meeple_frame_count}/{MEEPLE_BASELINE_SETTLE})...",
+                               (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
                 else:
-                    meeple_detect_count  = 0
-                    candidate_meeple_dir = None
-                    # New tile stably visible → player skipped meeple
-                    if unplaced:
-                        meeple_skip_count += 1
-                        if meeple_skip_count >= MEEPLE_SKIP_FRAMES:
-                            print("Unplaced tile detected — skipping meeple.")
-                            meeple_skip = True
-                    else:
+                    cv.putText(result, "Waiting for meeple...",
+                               (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
+
+                    colour, direction, meeple_dbg = detect_meeple(
+                        proc_frame, slot_px, grid_tracker.tile_size_px,
+                        baseline_frame=meeple_baseline)
+
+                    # Periodic terminal stats (every ~1s)
+                    if meeple_frame_count % 30 == 0:
+                        print(f"  [meeple dbg] frame={meeple_frame_count}  {meeple_dbg['stats']}")
+
+                    if colour is not None:
+                        if (direction == candidate_meeple_dir
+                                and colour == candidate_meeple_colour):
+                            meeple_detect_count += 1
+                        else:
+                            candidate_meeple_dir    = direction
+                            candidate_meeple_colour = colour
+                            meeple_detect_count     = 1
                         meeple_skip_count = 0
+                        print(f"  [meeple] colour={colour}  dir={direction}  "
+                              f"stable={meeple_detect_count}/{MEEPLE_CONFIRM_FRAMES}")
+                        if meeple_detect_count >= MEEPLE_CONFIRM_FRAMES:
+                            print(f"Meeple confirmed: {colour} at {direction}.")
+                            meeple_colour    = colour
+                            meeple_direction = direction
+                            meeple_placed    = True
+                    else:
+                        meeple_detect_count     = 0
+                        candidate_meeple_dir    = None
+                        candidate_meeple_colour = None
+                        # Exclude blobs that overlap committed tile positions —
+                        # a placed tile separated from the main blob by a gap
+                        # wider than MORPH_CLOSE appears as "unplaced" but is not.
+                        truly_unplaced = []
+                        for _cnt in unplaced:
+                            if stable_board_mask is not None:
+                                _m = np.zeros(blobs.shape, dtype=np.uint8)
+                                cv.drawContours(_m, [_cnt], -1, 255, -1)
+                                if cv.countNonZero(cv.bitwise_and(stable_board_mask, _m)) > 0:
+                                    continue
+                            truly_unplaced.append(_cnt)
+                        if truly_unplaced:
+                            meeple_skip_count += 1
+                            if meeple_skip_count >= MEEPLE_SKIP_FRAMES:
+                                print("Unplaced tile detected — skipping meeple.")
+                                meeple_skip = True
+                        else:
+                            meeple_skip_count = 0
 
                 # Safety timeout so the phase never hangs permanently
                 if not meeple_placed and not meeple_skip and meeple_frame_count >= MEEPLE_SAFETY_FRAMES:
                     print("Meeple safety timeout — skipping.")
                     meeple_skip = True
 
-                # Wait for bridge/interface to clear the flag, then move to IDENTIFY
-                if meeple_placed or meeple_skip:
-                    while meeple_placed or meeple_skip:
-                        time.sleep(0.05)
-                    phase                = IDENTIFY
-                    meeple_frame_count   = 0
-                    meeple_detect_count  = 0
-                    meeple_skip_count    = 0
-                    candidate_meeple_dir = None
-                    meeple_colour        = None
-                    meeple_direction     = None
+                # Exit WAIT_MEEPLE when meeple/skip is confirmed by any means:
+                #   - CV detected → meeple_placed / meeple_skip (bridge clears)
+                #   - Website button → meeple_handled (bridge signals directly)
+                if meeple_placed or meeple_skip or meeple_handled:
+                    if not meeple_handled:
+                        # CV path: wait for bridge to ACK and clear the flag
+                        while meeple_placed or meeple_skip:
+                            time.sleep(0.05)
+                    meeple_handled          = False
+                    phase                   = IDENTIFY
+                    meeple_frame_count      = 0
+                    meeple_detect_count     = 0
+                    meeple_skip_count       = 0
+                    candidate_meeple_dir    = None
+                    candidate_meeple_colour = None
+                    meeple_colour           = None
+                    meeple_direction        = None
+                    meeple_dbg              = None
                     print("Meeple phase done — ready for next tile.")
 
             # ── Phase 4: invalid placement — wait for tile removal ────────────
@@ -781,11 +836,12 @@ def cv_main_loop():
                     while meeple_skip:
                         time.sleep(0.05)
                 else:
-                    phase                = WAIT_MEEPLE
-                    meeple_frame_count   = 0
-                    meeple_detect_count  = 0
-                    meeple_skip_count    = 0
-                    candidate_meeple_dir = None
+                    phase                   = WAIT_MEEPLE
+                    meeple_frame_count      = 0
+                    meeple_detect_count     = 0
+                    meeple_skip_count       = 0
+                    candidate_meeple_dir    = None
+                    candidate_meeple_colour = None
                     # meeple_baseline already set at placement detection time — don't clobber it
                     print("Placement accepted — entering WAIT_MEEPLE.")
             else:
@@ -802,10 +858,22 @@ def cv_main_loop():
         panel_w, panel_h = DISP_W // 2, DISP_H // 2
         def to_bgr(img):
             return cv.cvtColor(img, cv.COLOR_GRAY2BGR) if len(img.shape) == 2 else img
-        top    = np.hstack([cv.resize(to_bgr(edges),   (panel_w, panel_h)),
-                            cv.resize(to_bgr(density), (panel_w, panel_h))])
+
+        if phase == WAIT_MEEPLE and meeple_dbg is not None:
+            # Replace top panels with meeple debug: baseline (left) and diff+contours (right)
+            base_img = meeple_dbg["base_crop"]
+            diff_img = meeple_dbg["diff_vis"]
+            blank    = np.zeros((panel_h, panel_w, 3), dtype=np.uint8)
+            p_base   = cv.resize(to_bgr(base_img), (panel_w, panel_h)) if base_img is not None else blank
+            p_diff   = cv.resize(to_bgr(diff_img), (panel_w, panel_h))
+            cv.putText(p_base, "Baseline", (10, 28), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+            stats_short = meeple_dbg["stats"][:60]
+            cv.putText(p_diff, f"Diff: {stats_short}", (10, 28), cv.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 0), 1)
+            top = np.hstack([p_base, p_diff])
+        else:
+            top = np.hstack([cv.resize(to_bgr(edges),   (panel_w, panel_h)),
+                             cv.resize(to_bgr(density), (panel_w, panel_h))])
+
         bottom = np.hstack([cv.resize(to_bgr(blobs),   (panel_w, panel_h)),
                             cv.resize(to_bgr(result),  (panel_w, panel_h))])
         cv.imshow("CV Debug", np.vstack([top, bottom]))
-
-        time.sleep(1)
