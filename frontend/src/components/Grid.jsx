@@ -2,6 +2,7 @@ import GameBoard from "./Gameboard";
 import Players from "./Players";
 import DetectedTile from "./DetectedTile";
 import MeeplePlacer from "./MeeplePlacer";
+import ActiveEvents from "./ActiveEvents";
 
 export default function Grid({
   currentPlayer,
@@ -14,6 +15,7 @@ export default function Grid({
   pendingTile,
   pendingTileList,
   pendingPlacement,
+  activeEvents,
   refresh,
 }) {
   return <div className="grid">
@@ -73,6 +75,9 @@ export default function Grid({
           </p>
         </div>
       </div>
+
+      {/* Active Events */}
+      <ActiveEvents events={activeEvents} players={players} />
     </div>
   </div>;
 }
