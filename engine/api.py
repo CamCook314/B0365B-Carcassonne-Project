@@ -4,6 +4,14 @@ from flask_cors import CORS
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from pathlib import Path
+ROOT = Path(__file__).parent.parent
+ENGINE = Path(__file__).parent
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ENGINE))
+
+from cv import projector
+
 from tile_set import tile_set
 import tile_bag
 from OldMain import (initialiseBoard, get_valid_placements_all_rotations, STARTING_RIVER)
@@ -173,6 +181,10 @@ def _resolve_pending(tile_id):
     all_valid = get_valid_placements_all_rotations(game_state, base_num)
     if not all_valid:
         return None, "No valid placements for this tile"
+    
+    # Extract all valid coords for valid tile placements
+    valid_coords = list(all_valid.keys())
+    projector.set_proj_valid(valid_coords) # Send coords to projector to display
 
     pending_tile = f"ID{base_num * 4}"
     pending_valid = [[x, y, rid] for (x, y), rid in all_valid.items()]
@@ -313,6 +325,7 @@ def place_tile():
     tile_obj = tile_set[placed_tile_id]
     game_state.place_tile(x, y, tile_obj)
     tile_bag_instance.remove_tile(placed_tile_id)
+    projector.clear_proj_valid() # Clear projector valid tiles
 
     pending_tile = None
     pending_valid = []
