@@ -1,5 +1,7 @@
 import { getHistory } from "../api/api";
+import { PLAYER_COLOURS } from "../constants/config";
 
+let historyLength = 0;
 
 export function ActivityLog( { history }) {
     if (!history || history.length === 0) {
@@ -26,9 +28,9 @@ export function ActivityLog( { history }) {
     <div className="card-body">
             {newTiles ? newHistory.map((entry, index) => (
                 <div key={index} className="log-entry">
-                    <p>Placed </p> 
+                    <p>{`${convertPlayerToColour(newTiles[index]?.current_player)} placed `}</p>
                     <img style={{width: 15, height: 15, display: "inline-block"}} src={`/tiles/${newTiles[index]?.tile_id}.jpg`} alt={newTiles[index]?.tile_id} />
-                    <p>{` at (${newTiles[index]?.position}) ${newTiles[index]?.meeple_attached ? '⚪' : ''}`}</p>
+                    <p>{` at (${newTiles[index]?.position}) ${newTiles[index]?.meeple_attached ? convertPlayerToColourMeeple(newTiles[index]?.current_player) : ''}`}</p>
                 </div>
         )) : <p style={{ color: "var(--dim)" }}>Move history will appear here</p>}
     </div>
@@ -47,10 +49,39 @@ function findNewTiles(history) {
         const newTiles = history[i].data.board || {};
         for (const key in newTiles) {
             if (!oldTiles[key]) {
-                tiles.push({ position: key, tile_id: newTiles[key].tile_id, meeple_attached: newTiles[key].meeple_attached });
+                tiles.push({ position: key, tile_id: newTiles[key].tile_id, meeple_attached: newTiles[key].meeple_attached, current_player: history[i].data.current_player });
             }
         }
     }
     return tiles;
 }
 
+function convertPlayerToColour(playerIndex) {
+    switch (playerIndex) {
+        case 0:
+            return "🟥"
+        case 1:
+            return "🟦"
+        case 2:
+            return "🟩"
+        case 3:
+            return "🟨"
+        case 4:
+            return "🟪"
+    }
+}
+
+function convertPlayerToColourMeeple(playerIndex) {
+    switch (playerIndex) {
+        case 0:
+            return "🔴"
+        case 1:
+            return "🔵"
+        case 2:
+            return "🟢"
+        case 3:
+            return "🟡"
+        case 4:
+            return "🟣"
+    }
+}
