@@ -16,9 +16,42 @@ class player:
 		self.meeples = 7
 		self.score = 0
 
+	def ability(self, game):
+		pass
+
 	def return_colour(self):
 		colours = ["red", "blue", "green", "yellow", "black"]
 		return colours[self.colour]
+
+
+class farmer(player): #gets an extra point when scoring roads
+	def __init__(self):
+		super().__init__("yellow")
+
+	def ability(self, game):
+		self.score += 1
+
+class knight(player): #gets an extra 2 points when scoring cities
+	def __init__(self):
+		super().__init__("blue")
+	
+	def ability(self, game):
+		pass
+
+class lord(player): # steals point from random player with > 1 score when scoring cities
+	def __init__(self):
+		super().__init__("red")
+
+	def ability(self, game):
+		pass
+
+class merchant(player): #starts with 3 points
+	def __init__(self):
+		super().__init__("green")
+
+	def ability(self, game):
+		pass
+
 
 
 
