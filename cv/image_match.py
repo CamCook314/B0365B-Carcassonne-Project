@@ -4,6 +4,10 @@ import torch.nn.functional as F
 import open_clip
 from PIL import Image
 from pathlib import Path
+import platform
+import pathlib
+if platform.system() != 'Windows':
+    pathlib.WindowsPath = pathlib.PosixPath
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
