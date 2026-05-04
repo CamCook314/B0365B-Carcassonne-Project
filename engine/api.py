@@ -307,6 +307,7 @@ def place_tile():
     placed_tile_id = None
     valid_at_pos = [rid for px, py, rid in pending_valid if px == x and py == y]
     if not valid_at_pos:
+        projector.set_invalid()
         return jsonify({"error": "Invalid placement position"}), 400
     if rotation_id is not None:
         if rotation_id in valid_at_pos:
@@ -320,12 +321,14 @@ def place_tile():
         placed_tile_id = valid_at_pos[0]
 
     if placed_tile_id is None:
+        projector.set_invalid()
         return jsonify({"error": "Invalid placement"}), 400
 
     tile_obj = tile_set[placed_tile_id]
     game_state.place_tile(x, y, tile_obj)
     tile_bag_instance.remove_tile(placed_tile_id)
     projector.clear_proj_valid() # Clear projector valid tiles
+    projector.clear_invalid()
 
     pending_tile = None
     pending_valid = []
