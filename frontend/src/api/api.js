@@ -1,6 +1,6 @@
 const BASE_URL = "http://127.0.0.1:1234";
 
-let history = ["starting history..."];
+let history = [];
 let lastState = null;
 
 function addToHistory(endpoint, data) {
@@ -42,7 +42,7 @@ export async function startGame(numPlayers) {
     throw new Error(err.error || "Failed to start game");
   }
   const data = await res.json();
-  addToHistory("/start", data);
+  setHistory([]); // clear history on new game
   return data;
 }
 
@@ -124,7 +124,6 @@ export async function setMeeple(row, col, side) {
     throw new Error(err.error || "Failed to set meeple");
   }
   const data = await res.json();
-  addToHistory("/meeple", data);
   return data;
 }
 

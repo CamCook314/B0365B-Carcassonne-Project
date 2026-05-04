@@ -3,6 +3,7 @@ import Players from "./Players";
 import DetectedTile from "./DetectedTile";
 import MeeplePlacer from "./MeeplePlacer";
 import ActiveEvents from "./ActiveEvents";
+import { ActivityLog } from "./ActivityLog";
 
 export default function Grid({
   currentPlayer,
@@ -17,19 +18,22 @@ export default function Grid({
   pendingPlacement,
   activeEvents,
   refresh,
+  history
 }) {
   return <div className="grid">
     <div className="col">
       {/* Players */}
       <Players currentPlayer={currentPlayer} players={players} />
 
-      {/* Meeple Placer (replaces Activity Log) */}
+      {/* Meeple Placer */}
       <MeeplePlacer
         pendingPlacement={pendingPlacement}
         currentPlayer={currentPlayer}
         players={players}
       />
+      <ActivityLog history={history} />
     </div>
+    
 
     {/* gameboard */}
     <div className="col">
