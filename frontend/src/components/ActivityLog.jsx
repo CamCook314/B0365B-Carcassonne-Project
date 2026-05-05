@@ -41,7 +41,10 @@ function findNewTiles(history) {
     const tiles = [];
     if (history.length < 2) {
         const board = history[0].data.board;
-        tiles.push({position: Object.keys(board)[0], tile_id: board[Object.keys(board)[0]].tile_id});
+        const firstKey = Object.keys(board)[0];
+        if (firstKey && board[firstKey]) {
+            tiles.push({ position: firstKey, tile_id: board[firstKey].tile_id });
+        }
         return tiles;
     }
     for (let i = 1; i < history.length; i++) {

@@ -344,7 +344,12 @@ def cv_main_loop():
         # ── Board exists ──────────────────────────────────────────────────────
         else:
             old_board_mask            = board_mask.copy()
-            new_board_cnt, unplaced   = classify_contours(valid, board_mask, blobs.shape)
+            # Always anchor board identification to the committed stable state.
+            # The board never physically moves, so using stable_board_mask prevents
+            # arm/hand blobs from stealing the board identity even when MORPH_CLOSE
+            # merges them with the board blob.
+            _classify_anchor = stable_board_mask if stable_board_mask is not None else board_mask
+            new_board_cnt, unplaced   = classify_contours(valid, _classify_anchor, blobs.shape)
 
             # Drop any "unplaced" blobs larger than 3× the expected tile area.
             # Hands and arms produce large blobs that classify_contours correctly
