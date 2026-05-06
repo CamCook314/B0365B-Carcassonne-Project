@@ -37,7 +37,9 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
                             e.target.style.display = "none";
                         } } />
                 </div>
-                <div className="tile-name">{pendingTile}</div>
+                <div className="tile-name">
+                    <p>{pendingTile}</p>
+                    </div>
                 <div
                     style={{
                         fontSize: 11,

@@ -22,7 +22,7 @@ export default function Players({ currentPlayer, players }) {
           </div>
           <div>
             <div className="player-name">
-              {p.colour || `Player ${i + 1}`}
+              <p style={{ padding: 0, margin: 0 }}>{p.colour || `Player ${i + 1}`}</p>
             </div>
             <div className="player-detail">{p.meeples}/7 meeples</div>
           </div>

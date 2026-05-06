@@ -31,7 +31,7 @@ export function ActivityLog( { history }) {
             {newTiles ? newTiles.map((entry, index) => (
                 <div key={index} className="log-entry">
                     <p>{`${convertPlayerToColour(newTiles[index]?.current_player)} placed `}</p>
-                    <img style={{width: 15, height: 15, display: "inline-block"}} src={`/tiles/${newTiles[index]?.tile_id}.jpg`} alt={newTiles[index]?.tile_id} />
+                    <img style={{width: 30, height: 30, display: "inline-block", verticalAlign: "middle"}} src={`/tiles/${newTiles[index]?.tile_id}.jpg`} alt={newTiles[index]?.tile_id} />
                     <p>{` at (${newTiles[index]?.position}) ${newTiles[index]?.meeple_attached ? convertPlayerToColourMeeple(newTiles[index]?.current_player) : ''}`}</p>
                 </div>
         )) : <p style={{ color: "var(--dim)" }}>Move history will appear here</p>}
