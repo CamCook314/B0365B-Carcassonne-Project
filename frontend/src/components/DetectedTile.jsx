@@ -55,7 +55,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
         ) : (
             <>
                 <div className="tile-preview">—</div>
-                <div className="tile-name">Waiting for CV...</div>
+                <div className="tile-name"><p>Waiting for CV...</p></div>
             </>
         )}
     </div>; 
