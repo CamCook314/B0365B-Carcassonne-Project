@@ -72,7 +72,6 @@ export async function overridePendingTile(tileId) {
     throw new Error(err.error || "Failed to override pending tile");
   }
   const data = await res.json();
-  addToHistory("/pending/override", data);
   return data;
 }
 
@@ -88,7 +87,6 @@ export async function setPendingTileList(tileIds) {
     throw new Error(err.error || "Failed to fetch tile list");
   }
   const data = await res.json();
-  addToHistory("/pending/list", data);
   return data;
 }
 
@@ -135,7 +133,8 @@ export async function resetGame() {
     throw new Error(err.error || "Failed to reset game");
   }
   const data = await res.json();
-  setHistory([]); // clear history on reset
+  history = [];
+  lastState = null;
   return data;
 }
 
