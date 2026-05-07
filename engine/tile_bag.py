@@ -62,10 +62,8 @@ class tile_bag:
         for i in range(lower, upper + 1):
             removed = self.tile_bag.pop(create_ID(i), None)
             if removed == None:
-                # Handle for error, shouldn't reach here unless
-                # AI model breaks
                 print("Error, trying to remove already removed tile")
-                return 
+                continue  # keep removing remaining rotations — don't leave bag in partial state
 
     # Function to find a tile given an ID
     def find_tile_id(self, tile_id):

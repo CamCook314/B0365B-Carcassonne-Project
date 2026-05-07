@@ -23,7 +23,7 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
 
     return {
       placedTiles: tiles.map(t => ({ ...t, ...px(t.col, t.row) })),
-      ghostTiles: validPlacements.map(([x, y]) => ({ col: x, row: y, ...px(x, y) })),
+      ghostTiles: [...new Map(validPlacements.map(([x, y]) => [`${x},${y}`, { col: x, row: y, ...px(x, y) }])).values()],
       width: (maxCol - minCol + 1) * CELL,
       height: (maxRow - minRow + 1) * CELL,
     };

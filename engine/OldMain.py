@@ -137,8 +137,9 @@ def get_valid_placements_all_rotations(game, base_tile_num):
         valid = get_valid_placements(game, tile_obj)
         for x, y in valid:
             if (x, y) not in all_valid:
-                all_valid[(x, y)] = rid
-    
+                all_valid[(x, y)] = []
+            all_valid[(x, y)].append(rid)
+
     return all_valid
 
 #Runs every turn

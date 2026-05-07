@@ -527,10 +527,15 @@ def cv_main_loop():
                             # sat_in_diff = sat_blobs & diff_mask — keeps only real tile pixels.
                             # MORPH_CLOSE halos are empty table surface (zero saturation) so they
                             # score exactly 0, eliminating halo contamination entirely.
+                            # Minimum slot coverage: 25% of tile bounding box area.
+                            # Scales with tile_size so small transient blobs (arm/hand
+                            # near an existing tile) don't trigger a false placement.
+                            min_slot_cov = max(200, int(grid_tracker.tile_size_px ** 2 * 0.25))
+
                             sat_in_diff = cv.bitwise_and(sat_blobs, diff_mask)
                             best_slot, top_cov = grid_tracker.best_coverage_slot(sat_in_diff)
                             used_sat = True
-                            if top_cov < 200:
+                            if top_cov < min_slot_cov:
                                 best_slot = None
 
                             # Fallback A: muted-colour tile — use raw diff coverage.
@@ -539,7 +544,7 @@ def cv_main_loop():
                             if best_slot is None:
                                 best_slot, top_cov = grid_tracker.best_coverage_slot(diff_mask)
                                 used_sat = False
-                                if top_cov < 200:
+                                if top_cov < min_slot_cov:
                                     best_slot = None
 
                             # Fallback B: enclosed centre tile — diff is near-empty because
@@ -551,7 +556,9 @@ def cv_main_loop():
                                     top_cov   = 0
                                     print(f"  Grid: enclosed slot fallback → {best_slot}")
 
-                            # Coverage margin check — warn if two slots score similarly.
+                            # Coverage margin check — reject if two slots score too similarly.
+                            # A genuine placement dominates one slot clearly; arm/hand blobs
+                            # spread coverage across multiple slots producing a low margin.
                             if best_slot is not None and top_cov > 0:
                                 cov_mask = sat_in_diff if used_sat else diff_mask
                                 second_cov = max(
@@ -562,17 +569,23 @@ def cv_main_loop():
                                 margin = (top_cov - second_cov) / max(top_cov, 1)
                                 label  = "sat" if used_sat else "diff"
                                 if margin < 0.2:
-                                    print(f"  WARNING: coverage ambiguous ({top_cov} vs "
+                                    print(f"  Coverage ambiguous ({top_cov} vs "
                                           f"{second_cov} {label}-px, {margin:.0%} margin)"
-                                          f" — press 'n' if grid looks wrong")
+                                          f" — retrying.")
+                                    best_slot = None
                                 else:
                                     print(f"  Grid: best slot → {best_slot} "
                                           f"({top_cov} {label}-px, {margin:.0%} margin)")
 
-                            # Diagnostic cross-check: log if diff centroid disagrees.
+                            # Cross-validate: if the diff centroid isn't near any open slot
+                            # the dominant blob is arm/hand, not the placed tile — reject.
                             if best_slot is not None and diff_cx is not None:
                                 centroid_slot = grid_tracker.closest_slot(diff_cx, diff_cy)
-                                if centroid_slot is not None and centroid_slot != best_slot:
+                                if centroid_slot is None:
+                                    print(f"  diff centroid ({diff_cx:.0f},{diff_cy:.0f}) not near "
+                                          f"any slot — arm/hand blob, retrying.")
+                                    best_slot = None
+                                elif centroid_slot != best_slot:
                                     print(f"  NOTE: diff centroid suggests {centroid_slot}, "
                                           f"coverage chose {best_slot}")
 
