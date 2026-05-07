@@ -86,7 +86,7 @@ class gameStateClass:
 				randx = random.randint(-5, 5)
 				randy = random.randint(-5, 5)
 
-				if (randx, randy) not in [e.coords for e in self.event_pool]:
+				if (randx, randy) not in [e.coords for e in self.event_pool]: #unique coords
 					self.event_pool.append(Event((randx, randy)))
 					print(Event((randx, randy)))
 					break
@@ -198,26 +198,35 @@ class gameStateClass:
 				edgegroup = [matching_edges]
 			else:
 				edgegroup = [[d] for d in matching_edges]
+				#print(edgegroup)
 			for group in edgegroup:
+				#print(group)
 				matching_structures = []
 				for structure in self.structures:
 					if structure.type != type:
 						continue
 					connections = structure.check_structure_compatability(new_row, new_col, tile, self.board)
 					group_connections = [c for c in connections if c in group]
+					#print(group_connections)
 					if group_connections:
 						matching_structures.append((structure, group_connections))
 				if len(matching_structures) == 0:
 					if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1):
 						temp_struct = structures(tile, new_row, new_col, 1)
+						temp_struct.edges = []
+						temp_struct.edges.append((tile, group[0]))
+						#print(temp_struct.edges)
 						self.structures.append(temp_struct)
 					elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2):
 						temp_struct = structures(tile, new_row, new_col, 2)
+						temp_struct.edges = []
+						temp_struct.edges.append((tile, group[0]))
 						self.structures.append(temp_struct)
 				elif len(matching_structures) == 1:
 					struct, _ = matching_structures[0]
-					struct.extend_structure(new_row, new_col, tile, self.board)
+					struct.extend_structure(new_row, new_col, tile, self.board, group)
 				elif len(matching_structures) >= 2:
+					#print(len(matching_structures))
 					all_tiles = []
 					all_edges = []
 					all_players = []
@@ -231,10 +240,9 @@ class gameStateClass:
 					new_struct.tiles_used = all_tiles
 					
 					new_struct.edges = all_edges
-					new_struct.extend_structure(new_row, new_col, tile, self.board)
+					new_struct.extend_structure(new_row, new_col, tile, self.board, group)
 
 					self.structures.append(new_struct)
-
 		if tile.attribute == 2: #Monastary
 			#Monastary detected
 			temp_struct = structures(tile, new_row, new_col, 3)
@@ -452,7 +460,7 @@ class structures:
 				self.edges.append((first_tile, "right"))
 
 	
-	def extend_structure(self, row, col, tile, board):
+	def extend_structure(self, row, col, tile, board, group = None):
 		"""
 		This method, given a new tile, checks what structure it is to be added to and adds it
 		If no structure is found then a new one is made
@@ -477,6 +485,8 @@ class structures:
 		}
 
 		for direction, ((nr, nc), opposite_side, my_edge) in neighbors.items():
+			if group is not None and direction not in group:
+				continue
 			if nr < 0 or nr >= len(board) or nc < 0 or nc >= len(board[0]) or my_edge != self.type:
 				continue
 			neighbor = board[nr][nc]
@@ -522,8 +532,9 @@ class structures:
 				continue
 			for tile1, row1, col1 in self.tiles_used:
 				if tile1 is neighbor and row1 == nr and col1 == nc:
-					connections.append(direction)
-					break
+					if (neighbor, opposite_side) in self.edges:
+						connections.append(direction)
+						break
 		return connections
 
 	def score_structure(self, unrest):
@@ -615,6 +626,37 @@ if __name__ == "__main__":
 
 	printBoard(game)
 	print(game.structures)
+
+	t2 = tile(0, 1, 0, 1, 1, 0) # road going up and right
+	t3 = tile( 1, 1, 1, 0, 0, 0) # another split road
+
+	game.place_tile(3, 4, t2)
+	game.manage_structures(3, 4, t2)
+
+	printBoard(game)
+	print(game.structures)
+
+	game.place_tile(4,4, t3)
+	game.manage_structures(4, 4, t3)
+	game.place_meeple(t3, "up")
+
+	printBoard(game)
+	print(game.structures)
+	print(p1.score)
+
+	t4 = tile( 1, 1, 1, 0, 0, 0)
+	
+	game.place_tile(4,5, t4)
+	
+	game.manage_structures(4, 5, t4)
+	
+
+	printBoard(game)
+	print(game.structures)
+	print(p1.score)
+	print(p2.score)
+
+
 	"""
 	t3 = tile(1, 0, 0, 0, 0, 0) # tile up end
 	t4 = tile(0,1,0,0,0,0) #tile down end

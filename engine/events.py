@@ -28,7 +28,7 @@ class Event:
         elif self.name == "volcano":
             self.volcano_event(game)
         elif self.name == "unrest":
-            self.plague_event(game)
+            self.unrest_event(game)
 
     def extra_turn_event(self, game):
         self.name = "extra turn"
