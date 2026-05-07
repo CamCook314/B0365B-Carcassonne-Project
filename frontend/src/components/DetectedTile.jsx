@@ -142,7 +142,7 @@ function TileCandidates({ pendingTileList, refresh }) {
                         }}
                     >
                         <img
-                            src={`/tiles/${tileId}.jpg`}
+                            src={`/tiles/ID${tileId}.jpg`}
                             alt={tileId}
                             style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 3 }}
                             onError={(e) => { e.target.style.display = "none"; }}
