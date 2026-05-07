@@ -2,7 +2,7 @@
 import torch
 import torch.nn.functional as F
 import open_clip
-from PIL import Image
+from PIL import Image, ImageEnhance
 from pathlib import Path
 import platform
 import pathlib
@@ -28,15 +28,44 @@ def get_embedding(path: Path, model, preprocess) -> torch.Tensor:
         emb = model.encode_image(image).squeeze(0)
     return F.normalize(emb, dim=0)
 
+
+def _get_augmented_embedding(path: Path, model, preprocess) -> torch.Tensor:
+    """Mean embedding over 5 photometric variants — more robust reference centre."""
+    base_img = Image.open(path).convert("RGB")
+    variants = [
+        base_img,
+        ImageEnhance.Brightness(base_img).enhance(0.85),
+        ImageEnhance.Brightness(base_img).enhance(1.15),
+        ImageEnhance.Contrast(base_img).enhance(0.80),
+        ImageEnhance.Contrast(base_img).enhance(1.20),
+    ]
+    embs = []
+    for img in variants:
+        tensor = preprocess(img).unsqueeze(0)
+        with torch.no_grad():
+            emb = model.encode_image(tensor).squeeze(0)
+        embs.append(F.normalize(emb, dim=0))
+    mean_emb = torch.stack(embs).mean(dim=0)
+    return F.normalize(mean_emb, dim=0)
+
+
 ## preprocess all images in search dir
-def preprocess_embeddings(model, preprocess) -> dict[Path, torch.Tensor]:
-    search_dir = Path("assets/tile_photos/edit")
+def preprocess_embeddings(model, preprocess, search_dir=None,
+                          augment=False) -> dict[Path, torch.Tensor]:
+    if search_dir is None:
+        search_dir = Path("assets/tile_photos/edit")
+    else:
+        search_dir = Path(search_dir)
     embeddings = {}
     count = 0
     for img_path in sorted(search_dir.rglob("*.jpg")):
         try:
-            embeddings[img_path] = get_embedding(img_path, model, preprocess)
-            print(count, "success", img_path.stem)
+            if augment:
+                embeddings[img_path] = _get_augmented_embedding(img_path, model, preprocess)
+            else:
+                embeddings[img_path] = get_embedding(img_path, model, preprocess)
+            label = "aug" if augment else "ok"
+            print(count, label, img_path.stem)
             count += 1
         except Exception as e:
             print("failed", img_path, "->", e)
@@ -44,13 +73,22 @@ def preprocess_embeddings(model, preprocess) -> dict[Path, torch.Tensor]:
 
 
 ## save embeddings
-def save_embeddings(embeddings):
-    torch.save(embeddings, "cv/embeddings.pt")
+def save_embeddings(embeddings, path="cv/embeddings.pt"):
+    torch.save(embeddings, path)
 
 ## load embeddings
 def load_embeddings() -> dict[Path, torch.Tensor]:
     embeddings = torch.load("cv/embeddings.pt", weights_only=False)
     return embeddings
+
+## load game-style reference embeddings (returns None if cv/game_embeddings.pt does not exist)
+def load_game_embeddings() -> dict[Path, torch.Tensor] | None:
+    game_path = Path(__file__).parent / "game_embeddings.pt"
+    if game_path.exists():
+        embs = torch.load(str(game_path), weights_only=False)
+        print(f"Loaded game embeddings ({len(embs)} refs)")
+        return embs
+    return None
 
 ## load bias vector (returns None if cv/bias.pt does not exist)
 def load_bias() -> torch.Tensor | None:
@@ -62,14 +100,31 @@ def load_bias() -> torch.Tensor | None:
     print("No bias.pt found — running without bias correction.")
     return None
 
+
+def _score_query_vs_embeddings(Q: torch.Tensor,
+                                emb_dict: dict[Path, torch.Tensor]) -> dict[str, float]:
+    """Score 4-rotation query Q (4, D) against an embedding dict.
+
+    Returns {id_stem -> best_rotation_score} for every key in emb_dict.
+    """
+    ref_paths = list(emb_dict.keys())
+    R = torch.stack([emb_dict[p] for p in ref_paths])   # (N, D)
+    per_ref = (Q @ R.T).max(dim=0).values                # (N,) max over query rotations
+    return {p.stem: per_ref[i].item() for i, p in enumerate(ref_paths)}
+
+
 ## score images, return list of ranked results
 # model and preprocess from model_setup()
 # bias: optional tensor from load_bias(); shifts query embedding to match reference distribution
+# game_embeddings: optional dict from load_game_embeddings(); scored alongside studio embeddings.
+#   Per-ID score = max(studio, game) so the better-matching domain wins each rotation candidate.
 # Returns families ranked by the sum of their 4 rotation scores — more robust than ranking
 # individual references because a genuine match scores consistently across all 4 rotations,
 # while a false positive typically has one lucky high score and three low ones.
 # Each result is (family_sum_score, best_rotation_id_within_family).
-def match_image(path: str, model, preprocess, embeddings, bias=None) -> list[tuple[float, str]]:
+def match_image(path: str, model, preprocess, embeddings, bias=None,
+                game_embeddings=None,
+                remaining_families: set | None = None) -> list[tuple[float, str]]:
     image = Image.open(path).convert("RGB")
     angles = [0, 90, 180, 270]
 
@@ -84,22 +139,28 @@ def match_image(path: str, model, preprocess, embeddings, bias=None) -> list[tup
             emb = F.normalize(emb + bias, dim=0)
         query_embs.append(emb)
 
-    # Q: (4, D) — one row per query rotation.
-    # scores[r, i] = dot(Q[r], ref[i]) → max over r gives best-aligned query per reference.
-    Q = torch.stack(query_embs)
-    ref_paths = list(embeddings.keys())
-    R = torch.stack([embeddings[p] for p in ref_paths])   # (N, D)
-    per_ref = (Q @ R.T).max(dim=0).values                 # (N,) rotation-invariant per ref
+    Q = torch.stack(query_embs)   # (4, D)
 
-    # Aggregate: sum all 4 rotation scores within each family.
-    # A genuine match has all 4 references scoring well; a false positive has one high
-    # outlier and three low scores, so its family sum loses to the true family.
-    family_sum  = {}   # family_base → cumulative score
-    family_best = {}   # family_base → (best_individual_score, rid)
-    for i, p in enumerate(ref_paths):
-        rid  = p.stem
+    studio_scores = _score_query_vs_embeddings(Q, embeddings)
+    if game_embeddings is not None:
+        game_scores = _score_query_vs_embeddings(Q, game_embeddings)
+        all_ids = set(studio_scores) | set(game_scores)
+        per_id = {rid: max(studio_scores.get(rid, -1.0),
+                           game_scores.get(rid, -1.0))
+                  for rid in all_ids}
+    else:
+        per_id = studio_scores
+
+    # Restrict to families still in the tile bag (when bridge provides this info).
+    if remaining_families is not None:
+        per_id = {rid: s for rid, s in per_id.items()
+                  if (int(rid.replace("ID", "")) // 4) * 4 in remaining_families}
+
+    # Aggregate by family: sum 4 rotation scores; track best individual rotation.
+    family_sum  = {}
+    family_best = {}
+    for rid, s in per_id.items():
         base = (int(rid.replace("ID", "")) // 4) * 4
-        s    = per_ref[i].item()
         family_sum[base]  = family_sum.get(base, 0.0) + s
         if base not in family_best or s > family_best[base][0]:
             family_best[base] = (s, rid)
@@ -111,22 +172,30 @@ def match_image(path: str, model, preprocess, embeddings, bias=None) -> list[tup
 
 
 def match_rotation(path: str, model, preprocess, embeddings, family_id: str,
-                   bias=None) -> str:
+                   bias=None, game_embeddings=None) -> tuple[str, float]:
     """Match a placed-tile crop against only the 4 rotations of the confirmed family.
 
     Unlike match_image, this does NOT augment rotations — we want the model to be
     rotation-sensitive so we can distinguish ID0/ID1/ID2/ID3 from each other.
     The crop should already be deskewed to the board's axis before calling this.
 
-    Returns the specific tile ID string with the best rotation match, e.g. "ID9".
-    Falls back to family_id if no candidates are found in the embedding store.
+    If game_embeddings are provided, per-rotation score = max(studio, game) so
+    the better-matching domain wins.
+
+    Returns (tile_id, confidence_score).  tile_id falls back to family_id if no
+    candidates are found in the embedding store.
     """
     base = (int(family_id.replace("ID", "")) // 4) * 4
     candidates = {f"ID{base + r}" for r in range(4)}
-    ref_paths = [p for p in embeddings.keys() if p.stem in candidates]
-    if not ref_paths:
+
+    studio_refs = {p: embeddings[p] for p in embeddings if p.stem in candidates}
+    game_refs   = ({p: game_embeddings[p]
+                    for p in game_embeddings if p.stem in candidates}
+                   if game_embeddings is not None else {})
+
+    if not studio_refs and not game_refs:
         print(f"  match_rotation: no embeddings found for family {family_id} — using family ID")
-        return family_id
+        return family_id, 0.0
 
     image = Image.open(path).convert("RGB")
     tensor = preprocess(image).unsqueeze(0)
@@ -136,20 +205,53 @@ def match_rotation(path: str, model, preprocess, embeddings, family_id: str,
     if bias is not None:
         emb = F.normalize(emb + bias, dim=0)
 
-    R = torch.stack([embeddings[p] for p in ref_paths])
-    scores = emb @ R.T
-    ranked = sorted([(scores[i].item(), ref_paths[i].stem) for i in range(len(ref_paths))],
-                    reverse=True)
-    for score, rid in ranked:
+    # Collect per-rotation scores from both sources; take max per rotation ID.
+    rot_scores: dict[str, float] = {}
+
+    if studio_refs:
+        R = torch.stack([studio_refs[p] for p in studio_refs])
+        scores = emb @ R.T
+        for i, p in enumerate(studio_refs):
+            rid = p.stem
+            rot_scores[rid] = max(rot_scores.get(rid, -1.0), scores[i].item())
+
+    if game_refs:
+        R = torch.stack([game_refs[p] for p in game_refs])
+        scores = emb @ R.T
+        for i, p in enumerate(game_refs):
+            rid = p.stem
+            rot_scores[rid] = max(rot_scores.get(rid, -1.0), scores[i].item())
+
+    ranked = sorted(rot_scores.items(), key=lambda x: x[1], reverse=True)
+    for rid, score in ranked:
         print(f"  {score:.4f}  {rid}")
-    return ranked[0][1]
+
+    best_id, best_score = ranked[0]
+    return best_id, best_score
 
 
 if __name__ == "__main__":
-    # Run from project root:  python cv/image_match.py
-    # Regenerates cv/embeddings.pt from assets/tile_photos/edit/
-    print("Building embeddings from assets/tile_photos/edit/ ...")
+    import argparse
+    parser = argparse.ArgumentParser(description="Build CLIP embeddings for tile reference photos")
+    parser.add_argument("--augment", action="store_true",
+                        help="Mean-pool 5 photometric variants per image for a more robust reference")
+    parser.add_argument("--dir", default=None,
+                        help="Source image directory (default: assets/tile_photos/edit)")
+    parser.add_argument("--out", default=None,
+                        help="Output .pt path (default: cv/embeddings.pt, or cv/game_embeddings.pt when --dir is set)")
+    args = parser.parse_args()
+
+    src = args.dir or "assets/tile_photos/edit"
+    if args.out:
+        out = args.out
+    elif args.dir:
+        out = "cv/game_embeddings.pt"
+    else:
+        out = "cv/embeddings.pt"
+
+    label = "augmented " if args.augment else ""
+    print(f"Building {label}embeddings from {src} → {out} ...")
     model, preprocess = model_setup()
-    embeddings = preprocess_embeddings(model, preprocess)
-    save_embeddings(embeddings)
-    print(f"Saved {len(embeddings)} embeddings -> cv/embeddings.pt")
+    embeddings = preprocess_embeddings(model, preprocess, search_dir=src, augment=args.augment)
+    save_embeddings(embeddings, path=out)
+    print(f"Saved {len(embeddings)} embeddings → {out}")

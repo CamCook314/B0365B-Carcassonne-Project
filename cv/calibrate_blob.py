@@ -186,10 +186,12 @@ def main():
             print("ERROR: frame read failed")
             break
         frame = cv.flip(frame, -1)
+        # Downsample to 1080p — must match Project_CV.py so parameters behave identically
+        proc = cv.resize(frame, (1920, 1080))
 
         p       = _read_trackbars()
-        edges, blobs = _process(frame, p)
-        display = _build_display(frame, edges, blobs)
+        edges, blobs = _process(proc, p)
+        display = _build_display(proc, edges, blobs)
         cv.imshow(WIN, display)
 
         key = cv.waitKey(1) & 0xFF

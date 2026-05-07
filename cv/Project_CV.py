@@ -29,11 +29,13 @@ game_response     = (False, 1)   # (responded_bool, result_int); 1 = valid, 0 = 
 grid_origin       = None         # (x, y) pixel centre of tile (0,0) in proc coords (1920×1080)
 grid_tile_size    = None         # Pixel distance between adjacent tile centres in proc coords
 grid_angle        = None         # Board rotation angle in degrees
-meeple_placed     = False        # CV sets when meeple detected; bridge clears after POST /meeple
-meeple_colour     = None         # "red","blue","green","yellow","black"
-meeple_direction  = None         # "up","down","left","right","centre"
-meeple_skip       = False        # CV sets on timeout/skip; bridge clears after POST /meeple/skip
-meeple_handled    = False        # Set by bridge when website button handled the meeple/skip
+meeple_placed          = False   # CV sets when meeple detected; bridge clears after POST /meeple
+meeple_colour          = None    # "red","blue","green","yellow","black"
+meeple_direction       = None    # "up","down","left","right","centre"
+meeple_skip            = False   # CV sets on timeout/skip; bridge clears after POST /meeple/skip
+meeple_handled         = False   # Set by bridge when website button handled the meeple/skip
+expected_meeple_colour = None    # Bridge sets to current player colour at start of each turn
+remaining_families     = None    # Bridge updates after each placement; set of family base IDs still in bag
 
 
 def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
@@ -83,57 +85,65 @@ def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
     return crop
 
 
-def extract_tile_crop(frame, contour, proc_scale, padding=0.85):
+def extract_tile_crop(frame, contour, proc_scale,
+                      board_angle_deg=0.0, tile_size_px=None, padding=0.85):
     """Return a rotation-corrected square crop of the tile from the full-res frame.
 
-    Uses minAreaRect to find the tile's true rotation, rotates a ROI around the
-    tile to deskew it, then crops a tight square — minimising table in corners.
-    padding: multiplier on the tile side length (1.02 = ~2% border each side).
+    board_angle_deg: board rotation from grid_tracker (atan2(b, a) in degrees).
+      Used to deskew the crop consistently across all tiles.  Defaults to 0 for
+      the first tile before the grid angle is calibrated.
+    tile_size_px: calibrated tile size in proc-frame pixels; scales to full-res.
+      Falls back to the contour's minAreaRect long side when not yet available.
     """
     rect = cv.minAreaRect(contour)
-    (cx, cy), (rw, rh), angle = rect
+    (cx, cy), (rw, rh), _ = rect
 
-    # Scale to full-res coords
-    cx  = cx / proc_scale;  cy  = cy / proc_scale
-    rw  = rw / proc_scale;  rh  = rh / proc_scale
+    # Scale centre to full-res coords
+    cx = cx / proc_scale
+    cy = cy / proc_scale
 
-    # Normalise angle: minAreaRect picks an arbitrary axis for square-ish rects.
-    # Ensure we always rotate by the long-side angle so crops are consistently oriented.
-    if rw < rh:
-        angle += 90
+    # Prefer the calibrated tile size; fall back to contour dimensions
+    if tile_size_px is not None:
+        ts = tile_size_px / proc_scale
+    else:
+        ts = max(rw, rh) / proc_scale
 
-    side = int(max(rw, rh) * padding)
-
-    # Extract a ROI large enough to contain the rotated tile
+    side   = int(ts * padding)
     margin = int(side * 0.8)
+
     x1_roi = max(int(cx) - side - margin, 0)
     y1_roi = max(int(cy) - side - margin, 0)
     x2_roi = min(int(cx) + side + margin, frame.shape[1])
     y2_roi = min(int(cy) + side + margin, frame.shape[0])
     roi    = frame[y1_roi:y2_roi, x1_roi:x2_roi]
 
-    # Tile centre in ROI space
     cx_roi = cx - x1_roi
     cy_roi = cy - y1_roi
 
-    # Deskew: rotate ROI so tile sides are axis-aligned
-    M       = cv.getRotationMatrix2D((cx_roi, cy_roi), angle, 1.0)
+    M       = cv.getRotationMatrix2D((cx_roi, cy_roi), board_angle_deg, 1.0)
     rotated = cv.warpAffine(roi, M, (roi.shape[1], roi.shape[0]),
                             flags=cv.INTER_LINEAR)
 
-    # Crop tight square centred on tile
     x1 = max(int(cx_roi) - side // 2, 0)
     y1 = max(int(cy_roi) - side // 2, 0)
     x2 = min(int(cx_roi) + side // 2, rotated.shape[1])
     y2 = min(int(cy_roi) + side // 2, rotated.shape[0])
-    return rotated[y1:y2, x1:x2]
+    crop = rotated[y1:y2, x1:x2]
+    print(f"  [extract_tile_crop] centre=({cx:.0f},{cy:.0f})  ts={ts:.1f}  side={side}"
+          f"  angle={board_angle_deg:.1f}°  crop={crop.shape}")
+    return crop
 
 
 def cv_main_loop():
 
-    model, preprocess = image_match.model_setup()
-    embeddings        = image_match.load_embeddings()
-    bias              = image_match.load_bias()
+    model, preprocess  = image_match.model_setup()
+    embeddings         = image_match.load_embeddings()
+    game_embeddings    = image_match.load_game_embeddings()
+    bias               = image_match.load_bias()
+
+    # Minimum per-rotation cosine similarity for match_rotation to be trusted.
+    # Below this the system falls back to reporting the family ID only.
+    ROT_CONF_THRESHOLD = 0.70
 
     cap = cv.VideoCapture(0, cv.CAP_DSHOW)
     cap.set(cv.CAP_PROP_FRAME_WIDTH,  3840)
@@ -243,6 +253,13 @@ def cv_main_loop():
     rollback_last_coord         = None
     rollback_stable_board_mask  = None
 
+    # Deferred rotation: match_rotation is run at the WAIT_MEEPLE settle boundary
+    # (frame 60) so the arm has fully cleared before the crop is taken.
+    rotation_pending         = False
+    pending_family_id        = None
+    pending_refitted_px      = None
+    pending_validated_center = None
+
     # stable_board_mask: the committed board state — only updated on a confirmed
     # tile placement (with a valid grid slot).  Used as the diff baseline so that
     # arm/hand contamination (which inflates the live board_mask but never gets
@@ -253,7 +270,7 @@ def cv_main_loop():
     # the growth counter, so one flickering frame doesn't undo 2+ growth frames.
     non_growth_count = 0
 
-    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, grid_origin, grid_tile_size, grid_angle
+    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle
 
     print("Place the first tile on the board — it will be detected automatically. Press 'b' to force-confirm.")
 
@@ -289,7 +306,7 @@ def cv_main_loop():
             if valid:
                 first_tile_frame_count += 1
             else:
-                first_tile_frame_count = 0
+                first_tile_frame_count = max(0, first_tile_frame_count - 3)
 
             auto_trigger = first_tile_frame_count >= FIRST_TILE_CONFIRM_FRAMES
             status_text  = (f"Tile detected ({first_tile_frame_count}/{FIRST_TILE_CONFIRM_FRAMES})..."
@@ -324,13 +341,17 @@ def cv_main_loop():
                 # Identify tile family now so website can show candidates.
                 # Rotation detection and engine communication are deferred by
                 # ORIGIN_OVERRIDE_SECS so the user can override on the website first.
-                crop = extract_tile_crop(frame, first, proc_scale)
+                crop = extract_tile_crop(frame, first, proc_scale,
+                                        board_angle_deg=0.0,
+                                        tile_size_px=grid_tracker.tile_size_px)
                 path = os.path.join(CROPS_DIR, f"tile_{save_count:04d}.png")
                 cv.imwrite(path, crop)
                 print(f"Saved origin tile: {path}")
                 save_count += 1
 
-                results         = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
+                results         = image_match.match_image(path, model, preprocess, embeddings,
+                                                          bias=bias, game_embeddings=game_embeddings,
+                                                          remaining_families=remaining_families)
                 tile_id         = results[0][1]
                 tile_candidates = [(s, rid) for s, rid in results]
                 tile_checked    = True
@@ -413,9 +434,14 @@ def cv_main_loop():
                             placed_path = os.path.join(CROPS_DIR, f"placed_{save_count - 1:04d}.png")
                             cv.imwrite(placed_path, placed_crop)
                             print(f"Rotation detection for origin tile (family {family_id}):")
-                            tile_id = image_match.match_rotation(
-                                placed_path, model, preprocess, embeddings, family_id, bias=bias)
-                            print(f"  → {tile_id}")
+                            tile_id, rot_conf = image_match.match_rotation(
+                                placed_path, model, preprocess, embeddings, family_id,
+                                bias=bias, game_embeddings=game_embeddings)
+                            if rot_conf < ROT_CONF_THRESHOLD:
+                                print(f"  Low rotation confidence ({rot_conf:.4f}) — using family ID")
+                                tile_id = family_id
+                            else:
+                                print(f"  → {tile_id}  (conf={rot_conf:.4f})")
                             meeple_baseline   = proc_frame.copy()
                             grid_coord        = (0, 0)
                             grid_checked      = True
@@ -426,7 +452,10 @@ def cv_main_loop():
                             # end of this frame, then auto-skip meeple, then loop back
                             # to IDENTIFY to handle the second tile normally.
                         else:
-                            crop = extract_tile_crop(frame, candidate_tile_cnt, proc_scale)
+                            _ba = np.degrees(np.arctan2(grid_tracker.b, grid_tracker.a))
+                            crop = extract_tile_crop(frame, candidate_tile_cnt, proc_scale,
+                                                     board_angle_deg=_ba,
+                                                     tile_size_px=grid_tracker.tile_size_px)
                             path = os.path.join(CROPS_DIR, f"tile_{save_count:04d}.png")
                             cv.imwrite(path, crop)
                             print(f"Saved tile: {path}")
@@ -437,7 +466,9 @@ def cv_main_loop():
                             candidate_tile_center = None
                             phase                 = WAIT_PLACEMENT
                             placement_cooldown    = PLACEMENT_COOLDOWN_FRAMES
-                            results         = image_match.match_image(path, model, preprocess, embeddings, bias=bias)
+                            results         = image_match.match_image(path, model, preprocess, embeddings,
+                                                                      bias=bias, game_embeddings=game_embeddings,
+                                                                      remaining_families=remaining_families)
                             tile_id         = results[0][1]
                             tile_candidates = [(s, rid) for s, rid in results]
                             tile_checked    = True
@@ -634,27 +665,15 @@ def cv_main_loop():
                                         print(f"  [crop] centroid rejected ({dist:.0f}px from grid)"
                                               f" — using refitted grid {refitted_px}")
 
-                                # Post-placement rotation detection.
-                                if tile_id is not None:
-                                    family_id    = tile_id_override if tile_id_override is not None else tile_id
-                                    tile_id_override = None
-                                    board_angle  = np.degrees(
-                                        np.arctan2(grid_tracker.b, grid_tracker.a))
-                                    placed_crop  = crop_placed_slot(
-                                        frame, refitted_px, grid_tracker.tile_size_px,
-                                        proc_scale, board_angle,
-                                        center_px=validated_center)
-                                    placed_path  = os.path.join(
-                                        CROPS_DIR, f"placed_{save_count - 1:04d}.png")
-                                    cv.imwrite(placed_path, placed_crop)
-                                    print(f"Rotation detection for family {family_id}:")
-                                    tile_id = image_match.match_rotation(
-                                        placed_path, model, preprocess, embeddings,
-                                        family_id, bias=bias)
-                                    print(f"  → {tile_id}")
-
-                                grid_coord   = best_slot
-                                grid_checked = True
+                                # Defer rotation detection to WAIT_MEEPLE settle (frame 60)
+                                # so the arm has cleared before the crop is taken.
+                                pending_family_id        = tile_id_override if tile_id_override is not None else tile_id
+                                tile_id_override         = None
+                                pending_refitted_px      = refitted_px
+                                pending_validated_center = validated_center
+                                rotation_pending         = True
+                                print(f"Placement confirmed at {best_slot} — "
+                                      f"rotation detection deferred to settle period.")
                             else:
                                 # Could not map growth to a grid slot — arm or hand likely.
                                 # Do NOT update prev_board_area or stable_board_mask:
@@ -693,6 +712,30 @@ def cv_main_loop():
                     # Rolling baseline — keep updating until arm has fully cleared
                     meeple_baseline = proc_frame.copy()
                     meeple_dbg      = None
+
+                    # At the settle boundary the arm has cleared (~2s) — take the
+                    # placed-tile crop now and run rotation detection on a clean image.
+                    if rotation_pending and meeple_frame_count == MEEPLE_BASELINE_SETTLE:
+                        if pending_family_id is not None:
+                            board_angle = np.degrees(np.arctan2(grid_tracker.b, grid_tracker.a))
+                            placed_crop = crop_placed_slot(
+                                frame, pending_refitted_px, grid_tracker.tile_size_px,
+                                proc_scale, board_angle,
+                                center_px=pending_validated_center)
+                            placed_path = os.path.join(CROPS_DIR, f"placed_{save_count - 1:04d}.png")
+                            cv.imwrite(placed_path, placed_crop)
+                            print(f"Rotation detection for family {pending_family_id} (arm cleared):")
+                            tile_id, rot_conf = image_match.match_rotation(
+                                placed_path, model, preprocess, embeddings,
+                                pending_family_id, bias=bias, game_embeddings=game_embeddings)
+                            if rot_conf < ROT_CONF_THRESHOLD:
+                                print(f"  Low rotation confidence ({rot_conf:.4f}) — using family ID")
+                                tile_id = pending_family_id
+                            else:
+                                print(f"  -> {tile_id}  (conf={rot_conf:.4f})")
+                        grid_coord   = last_placed_coord
+                        grid_checked = True
+
                     cv.putText(result,
                                f"Settling baseline ({meeple_frame_count}/{MEEPLE_BASELINE_SETTLE})...",
                                (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
@@ -702,7 +745,8 @@ def cv_main_loop():
 
                     colour, direction, meeple_dbg = detect_meeple(
                         proc_frame, slot_px, grid_tracker.tile_size_px,
-                        baseline_frame=meeple_baseline)
+                        baseline_frame=meeple_baseline,
+                        expected_colour=expected_meeple_colour)
 
                     # Periodic terminal stats (every ~1s)
                     if meeple_frame_count % 30 == 0:
@@ -840,6 +884,14 @@ def cv_main_loop():
                     print("Origin tile accepted — auto-skipping meeple, returning to IDENTIFY.")
                     while meeple_skip:
                         time.sleep(0.05)
+                elif rotation_pending:
+                    # Placement+rotation confirmed from WAIT_MEEPLE settle; arm already cleared —
+                    # don't restart the meeple timer, just unlock meeple detection.
+                    rotation_pending         = False
+                    pending_family_id        = None
+                    pending_refitted_px      = None
+                    pending_validated_center = None
+                    print("Placement accepted — meeple detection active.")
                 else:
                     phase                   = WAIT_MEEPLE
                     meeple_frame_count      = 0
@@ -847,16 +899,19 @@ def cv_main_loop():
                     meeple_skip_count       = 0
                     candidate_meeple_dir    = None
                     candidate_meeple_colour = None
-                    # meeple_baseline already set at placement detection time — don't clobber it
                     print("Placement accepted — entering WAIT_MEEPLE.")
             else:
                 grid_tracker.restore()
-                prev_board_area   = rollback_prev_board_area
-                prev_sat_area     = rollback_prev_sat_area
-                last_placed_coord = rollback_last_coord
-                stable_board_mask = rollback_stable_board_mask
-                tile_saved = True
-                phase = INVALID_DISPLAY
+                prev_board_area          = rollback_prev_board_area
+                prev_sat_area            = rollback_prev_sat_area
+                last_placed_coord        = rollback_last_coord
+                stable_board_mask        = rollback_stable_board_mask
+                rotation_pending         = False
+                pending_family_id        = None
+                pending_refitted_px      = None
+                pending_validated_center = None
+                tile_saved          = True
+                phase               = INVALID_DISPLAY
                 removal_frame_count = 0
                 print("Placement rejected. Remove tile and reposition.")
 

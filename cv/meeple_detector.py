@@ -38,6 +38,7 @@ MAX_BLOB_AREA_FRAC = 0.25   # fraction of tile area — blobs larger than this a
 COLOUR_MATCH_FRAC  = 0.22   # fraction of blob that must match a colour
 CROP_HALF_FRAC     = 0.60   # half-width of crop as fraction of tile_size_px (was 0.45;
                              # increased to catch meeples placed near tile edges)
+CIRC_MIN           = 0.30   # minimum circularity for Pass 1; meeple bodies pass, tile art fails
 
 
 def _colour_mask(hsv_crop, colour):
@@ -51,7 +52,8 @@ def _colour_mask(hsv_crop, colour):
 
 
 def detect_meeple(proc_frame, slot_px, tile_size_px,
-                  baseline_frame=None, centre_frac=0.25):
+                  baseline_frame=None, centre_frac=0.25,
+                  expected_colour=None):
     """Detect a meeple on the last-placed tile.
 
     proc_frame     : current 1920×1080 BGR frame.
@@ -103,8 +105,21 @@ def detect_meeple(proc_frame, slot_px, tile_size_px,
         contours, _ = cv.findContours(diff_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
         hsv         = cv.cvtColor(crop, cv.COLOR_BGR2HSV)
 
+        # Baseline-subtracted new-pixel masks: current colour AND NOT dilated baseline colour.
+        # Dilation absorbs ~7px tile shifts so moved tile art disappears; the meeple survives.
+        colours_to_check = [expected_colour] if expected_colour else list(COLOUR_RANGES.keys())
+        baseline_hsv = cv.cvtColor(base_crop, cv.COLOR_BGR2HSV)
+        dilate_k = cv.getStructuringElement(cv.MORPH_ELLIPSE, (15, 15))
+        new_masks = {
+            c: cv.bitwise_and(
+                _colour_mask(hsv, c),
+                cv.bitwise_not(cv.dilate(_colour_mask(baseline_hsv, c), dilate_k)),
+            )
+            for c in colours_to_check
+        }
+
         diff_vis    = crop.copy()
-        best_score  = 0
+        best_score  = 0.0
         stats_parts = []
         total_diff  = cv.countNonZero(diff_mask)
 
@@ -120,30 +135,33 @@ def detect_meeple(proc_frame, slot_px, tile_size_px,
                 stats_parts.append(f"arm({area:.0f}px)")
                 continue
 
-            # Valid-size blob — test each colour independently
+            # Valid-size blob — test colours using baseline-subtracted new pixels
             cnt_mask = np.zeros(diff_mask.shape, dtype=np.uint8)
             cv.drawContours(cnt_mask, [cnt], -1, 255, -1)
 
-            blob_best_colour  = None
-            blob_best_overlap = 0
-            blob_best_frac    = 0.0
+            blob_best_colour = None
+            blob_best_score  = 0.0
+            blob_best_frac   = 0.0
 
-            for colour in COLOUR_RANGES:
-                cm      = _colour_mask(hsv, colour)
-                overlap = cv.countNonZero(cv.bitwise_and(cm, cnt_mask))
+            for colour in colours_to_check:
+                overlap = cv.countNonZero(cv.bitwise_and(new_masks[colour], cnt_mask))
                 frac    = overlap / area
-                if frac >= COLOUR_MATCH_FRAC and overlap > blob_best_overlap:
-                    blob_best_overlap = overlap
-                    blob_best_colour  = colour
-                    blob_best_frac    = frac
+                if frac >= COLOUR_MATCH_FRAC:
+                    perim = cv.arcLength(cnt, True)
+                    circ  = (4 * np.pi * area / perim ** 2) if perim > 0 else 0.0
+                    if circ < CIRC_MIN:
+                        continue  # irregular tile-art fragment — reject
+                    score = area * circ
+                    if score > blob_best_score:
+                        blob_best_score  = score
+                        blob_best_colour = colour
+                        blob_best_frac   = frac
 
             if blob_best_colour is not None:
-                # Blob matches a colour — draw green regardless of global rank
                 cv.drawContours(diff_vis, [cnt], -1, (0, 255, 0), 2)    # green: colour match
                 stats_parts.append(f"{blob_best_colour}({blob_best_frac:.0%},{area:.0f}px)")
-                if blob_best_overlap > best_score:
-                    # New global winner: update centroid and colour
-                    best_score  = blob_best_overlap
+                if blob_best_score > best_score:
+                    best_score  = blob_best_score
                     best_colour = blob_best_colour
                     M = cv.moments(cnt_mask)
                     if M["m00"] > 0:
@@ -151,9 +169,8 @@ def detect_meeple(proc_frame, slot_px, tile_size_px,
                         mcy = M["m01"] / M["m00"]
             else:
                 cv.drawContours(diff_vis, [cnt], -1, (0, 165, 255), 1)  # orange: no colour
-                # Log best fraction so thresholds can be tuned from terminal output
-                fracs = {c: cv.countNonZero(cv.bitwise_and(_colour_mask(hsv, c), cnt_mask)) / area
-                         for c in COLOUR_RANGES}
+                fracs = {c: cv.countNonZero(cv.bitwise_and(new_masks[c], cnt_mask)) / area
+                         for c in colours_to_check}
                 best_col_any  = max(fracs, key=fracs.get)
                 best_frac_any = fracs[best_col_any]
                 stats_parts.append(f"no-match({area:.0f}px,best={best_col_any}@{best_frac_any:.0%})")
@@ -171,16 +188,6 @@ def detect_meeple(proc_frame, slot_px, tile_size_px,
         #   2. Circularity weighting: score sub-contours by area × circularity so
         #      compact meeple shapes beat any irregular tile-art that survived (1).
         if best_colour is None:
-            baseline_hsv = cv.cvtColor(base_crop, cv.COLOR_BGR2HSV)
-            dilate_k = cv.getStructuringElement(cv.MORPH_ELLIPSE, (15, 15))
-            new_colour_masks = {
-                c: cv.bitwise_and(
-                    _colour_mask(hsv, c),
-                    cv.bitwise_not(cv.dilate(_colour_mask(baseline_hsv, c), dilate_k)),
-                )
-                for c in COLOUR_RANGES
-            }
-
             for cnt in contours:
                 cnt_area_sub = cv.contourArea(cnt)
                 if cnt_area_sub < MIN_BLOB_AREA or cnt_area_sub > max_blob_area:
@@ -189,21 +196,23 @@ def detect_meeple(proc_frame, slot_px, tile_size_px,
                 cv.drawContours(cnt_mask, [cnt], -1, 255, -1)
                 parent_area = cnt_area_sub
 
-                for colour in COLOUR_RANGES:
-                    colour_pixels = cv.bitwise_and(new_colour_masks[colour], cnt_mask)
+                for colour in colours_to_check:
+                    colour_pixels = cv.bitwise_and(new_masks[colour], cnt_mask)
                     sub_cnts, _ = cv.findContours(colour_pixels, cv.RETR_EXTERNAL,
                                                   cv.CHAIN_APPROX_SIMPLE)
                     for sc in sub_cnts:
                         sc_area = cv.contourArea(sc)
                         if sc_area < MIN_BLOB_AREA or sc_area > max_blob_area:
                             continue
+                        sc_perim = cv.arcLength(sc, True)
+                        sc_circ  = (4 * np.pi * sc_area / sc_perim ** 2
+                                    if sc_perim > 0 else 0.0)
+                        if sc_circ < CIRC_MIN:
+                            continue  # irregular tile-art fragment
                         sc_mask = np.zeros(diff_mask.shape, dtype=np.uint8)
                         cv.drawContours(sc_mask, [sc], -1, 255, -1)
                         M = cv.moments(sc_mask)
                         if M["m00"] > 0:
-                            sc_perim = cv.arcLength(sc, True)
-                            sc_circ  = (4 * np.pi * sc_area / sc_perim ** 2
-                                        if sc_perim > 0 else 0)
                             sc_score = sc_area * sc_circ
                             if sc_score > best_score:
                                 best_score  = sc_score

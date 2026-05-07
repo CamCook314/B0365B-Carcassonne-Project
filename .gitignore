@@ -8,6 +8,7 @@ engine/__pycache__/
 cv/tile_crops/
 cv/tile_crops_auto/
 cv/brio_photos/
+cv/game_refs/
 
 # CV — debug/test artefacts
 debug_img.png
