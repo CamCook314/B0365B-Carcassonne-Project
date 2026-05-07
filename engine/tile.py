@@ -32,6 +32,8 @@ class tile:
 		self.attribute = attribute
 		self.meeple_attached = False
 		self.player_placed = None
+		self.good_tile = False #chance for tile to score double points every turn
+		self.bad_tile = False #chance for tile to score hald points every turn
 
 	# For tile printing in testing
 	def __repr__(self):

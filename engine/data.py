@@ -52,6 +52,13 @@ class merchant(player): #starts with 3 points
 	def ability(self, game):
 		pass
 
+class necrobinder(player):
+	def __init__(self):
+		super().__init__("black")
+
+	def ability(self, game):
+		pass
+
 
 
 
@@ -213,14 +220,17 @@ class gameStateClass:
 				if len(matching_structures) == 0:
 					if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1):
 						temp_struct = structures(tile, new_row, new_col, 1)
-						temp_struct.edges = []
-						temp_struct.edges.append((tile, group[0]))
+						if tile.feature_continues == 0:
+							temp_struct.edges = []
+							temp_struct.edges.append((tile, group[0]))
+						
 						#print(temp_struct.edges)
 						self.structures.append(temp_struct)
 					elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2):
 						temp_struct = structures(tile, new_row, new_col, 2)
-						temp_struct.edges = []
-						temp_struct.edges.append((tile, group[0]))
+						if tile.feature_continues == 0:
+							temp_struct.edges = []
+							temp_struct.edges.append((tile, group[0]))
 						self.structures.append(temp_struct)
 				elif len(matching_structures) == 1:
 					struct, _ = matching_structures[0]
@@ -458,7 +468,6 @@ class structures:
 				self.edges.append((first_tile, "left"))
 			if first_tile.right == 2:
 				self.edges.append((first_tile, "right"))
-
 	
 	def extend_structure(self, row, col, tile, board, group = None):
 		"""
@@ -618,7 +627,7 @@ if __name__ == "__main__":
 
 	game = gameStateClass([p1, p2])
 
-	t1 = tile(1, 1, 1, 0, 0, 0)  # road vertical
+	"""t1 = tile(1, 1, 1, 0, 0, 0)  # road vertical
 
 	game.place_tile(3, 3, t1)
 	game.manage_structures(3, 3, t1)
@@ -658,6 +667,7 @@ if __name__ == "__main__":
 
 
 	"""
+	t1 = tile(1, 1, 0, 0, 1, 0)
 	t3 = tile(1, 0, 0, 0, 0, 0) # tile up end
 	t4 = tile(0,1,0,0,0,0) #tile down end
 
@@ -723,4 +733,3 @@ if __name__ == "__main__":
 
 	print("Player 1 score is " + str(p1.score))
 	print("Player 2 score is " + str(p2.score))
-	"""
