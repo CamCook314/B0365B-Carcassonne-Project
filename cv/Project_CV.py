@@ -138,8 +138,19 @@ def cv_main_loop():
 
     model, preprocess  = image_match.model_setup()
     embeddings         = image_match.load_embeddings()
-    game_embeddings    = image_match.load_game_embeddings()
-    bias               = image_match.load_bias()
+    classifier         = image_match.load_classifier()  # None if not yet trained
+    game_embeddings    = None  # disabled for DINOv2 testing
+    bias               = None  # disabled for DINOv2 testing (old bias is 512-dim)
+
+    def match_tile(path, remaining_families=None):
+        if classifier is not None:
+            return image_match.match_image_classifier(
+                path, model, preprocess, classifier,
+                remaining_families=remaining_families)
+        return image_match.match_image(
+            path, model, preprocess, embeddings,
+            bias=bias, game_embeddings=game_embeddings,
+            remaining_families=remaining_families)
 
     # Minimum per-rotation cosine similarity for match_rotation to be trusted.
     # Below this the system falls back to reporting the family ID only.
@@ -349,9 +360,7 @@ def cv_main_loop():
                 print(f"Saved origin tile: {path}")
                 save_count += 1
 
-                results         = image_match.match_image(path, model, preprocess, embeddings,
-                                                          bias=bias, game_embeddings=game_embeddings,
-                                                          remaining_families=remaining_families)
+                results         = match_tile(path, remaining_families=remaining_families)
                 tile_id         = results[0][1]
                 tile_candidates = [(s, rid) for s, rid in results]
                 tile_checked    = True
@@ -466,9 +475,7 @@ def cv_main_loop():
                             candidate_tile_center = None
                             phase                 = WAIT_PLACEMENT
                             placement_cooldown    = PLACEMENT_COOLDOWN_FRAMES
-                            results         = image_match.match_image(path, model, preprocess, embeddings,
-                                                                      bias=bias, game_embeddings=game_embeddings,
-                                                                      remaining_families=remaining_families)
+                            results         = match_tile(path, remaining_families=remaining_families)
                             tile_id         = results[0][1]
                             tile_candidates = [(s, rid) for s, rid in results]
                             tile_checked    = True
