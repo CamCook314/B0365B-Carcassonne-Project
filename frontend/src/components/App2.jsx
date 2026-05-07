@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { getGameState, startGame, getHistory } from "../api/api";
 import { POLLING_INTERVAL } from "../constants/config";
 import { useGameState } from "../hooks/useGameState";
+import { useSoundEffect } from "../hooks/useSoundEffect";
 import "../css/App2.css";
 import EntryScreen from "./EntryScreen";
 import LoadingScreen from "./LoadingScreen";
@@ -10,12 +11,16 @@ import Grid from "./Grid";
 import Header from "./Header";
 
 export default function App2() {
-  const { gameState, loading, error, retry: fetchState, immediateFetch, history } = useGameState();
+  const { play } = useSoundEffect();
+  const { gameState, loading, error, retry: fetchState, immediateFetch, history } = useGameState(play);
+  
+
   // start a new game
   const handleStart = async (numPlayers) => {
     try {
       await startGame(numPlayers);
       await fetchState();
+      play('gameStart');
     } catch (err) {
       setError(err.message);
     }
