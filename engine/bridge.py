@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ENGINE))
 
 from cv import Project_CV
+from cv import projector
 import api as engine_api
 
 API_BASE = "http://127.0.0.1:1234"
@@ -149,6 +150,9 @@ def _run_frontend():
         stderr=subprocess.DEVNULL,
     )
 
+def _run_projector():
+    projector.projector_main()
+
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -162,6 +166,12 @@ def main():
 
     # Give Flask a moment to bind before CV starts making requests
     time.sleep(1.5)
+
+    print("[bridge] Starting projector loop...")
+    threading.Thread(target=_run_projector, daemon=True).start()
+
+    # Give time for projector to start up
+    time.sleep(0.5)
 
     print("[bridge] Starting CV loop...")
     threading.Thread(target=_run_cv, daemon=True).start()
@@ -244,6 +254,9 @@ def main():
             vite_proc.terminate()
             vite_proc.wait()
             print("[bridge] Vite stopped.")
+
+        # Close down projector display as Ctrl+C doesn't remove projector connection
+        projector.projector_exit()
 
         # Restore terminal - os.system uses cmd.exe on Windows so stty won't work.
         # subprocess.run finds the Git Bash stty binary via PATH instead.

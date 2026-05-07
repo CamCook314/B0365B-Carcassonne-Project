@@ -4,6 +4,14 @@ from flask_cors import CORS
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from pathlib import Path
+ROOT = Path(__file__).parent.parent
+ENGINE = Path(__file__).parent
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ENGINE))
+
+from cv import projector
+
 from tile_set import tile_set
 import tile_bag
 from OldMain import (initialiseBoard, get_valid_placements_all_rotations, STARTING_RIVER)
@@ -233,6 +241,10 @@ def _resolve_pending(tile_id):
     all_valid = get_valid_placements_all_rotations(game_state, base_num)
     if not all_valid:
         return None, "No valid placements for this tile"
+    
+    # Extract all valid coords for valid tile placements
+    valid_coords = list(all_valid.keys())
+    projector.set_proj_valid(valid_coords) # Send coords to projector to display
 
     pending_tile = f"ID{base_num * 4}"
     # Expand to one entry per (position, rotation) so /place can validate any rotation CV detects.
@@ -358,6 +370,7 @@ def place_tile():
     placed_tile_id = None
     valid_at_pos = [rid for px, py, rid in pending_valid if px == x and py == y]
     if not valid_at_pos:
+        projector.set_invalid()
         return jsonify({"error": "Invalid placement position"}), 400
     if rotation_id is not None:
         if rotation_id in valid_at_pos:
@@ -376,6 +389,9 @@ def place_tile():
     tile_obj = tile_set[placed_tile_id]
     game_state.place_tile(x, y, tile_obj)
     tile_bag_instance.remove_tile(placed_tile_id)
+    projector.clear_proj_valid() # Clear projector valid tiles
+    projector.clear_invalid()
+    projector.set_valid()
 
     pending_tile = None
     pending_valid = []
