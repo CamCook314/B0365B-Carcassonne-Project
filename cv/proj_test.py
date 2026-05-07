@@ -32,19 +32,43 @@ while True:
     elif words[0] == "MORE_SCORE":
         print(f"Adding a More Score event at ({words[1]},{words[2]})")
         projector.add_img("MORE_SCORE", (int(words[1]), int(words[2])))
-    elif words[0] == "INVALID":
-        if words[1] != "clear":
-            print(f"Adding an INVALID move event")
-            projector.set_invalid()
-        else:
-            print(f"Clearing INVALID move mark event")
-            projector.clear_invalid()
+    elif words[0] == "BORDER":
+        if words[1] == "INVALID":
+            if words[2] != "clear":
+                print(f"Adding an INVALID move event")
+                projector.set_invalid()
+            else:
+                print(f"Clearing INVALID move mark event")
+                projector.clear_invalid()
+        elif words[1] == "VALID":
+            if words[2] != "clear":
+                print(f"Adding an VALID move event")
+                projector.set_valid()
+            else:
+                print(f"Clearing VALID move mark event")
+                projector.clear_valid()
+        elif words[1] == "EVENT":
+            if words[2] != "clear":
+                print(f"Adding an EVENT tile event")
+                projector.set_event()
+            else:
+                print(f"Clearing EVENT tile event")
+                projector.clear_event()
     elif words[0] == "EVENT":
         projector.add_img("EVENT", (int(words[1]), int(words[2])))
     elif words[0] == "VOLCANO":
         projector.add_img("VOLCANO", (int(words[1]), int(words[2])))
+    elif words[0] == "GOOD":
+        projector.add_img("GOOD_TILE", (int(words[1]), int(words[2])))
+    elif words[0] == "BAD":
+        projector.add_img("BAD_TILE", (int(words[1]), int(words[2])))
+    elif words[0] == "UNREST":
+        projector.add_img("UNREST", eval(words[1]))
     elif words[0] == "CLEAR":
-        projector.del_img(words[1], (int(words[2]), int(words[3])))
+        if words[1] != "UNREST":
+            projector.del_img(words[1], (int(words[2]), int(words[3])))
+        else:
+            projector.del_img(words[1], (0,0))
     elif words[0] == "VALID":
         if words[1] != "clear":
             print(f"Adding valid tile locations")

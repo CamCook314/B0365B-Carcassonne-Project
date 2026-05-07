@@ -321,7 +321,6 @@ def place_tile():
         placed_tile_id = valid_at_pos[0]
 
     if placed_tile_id is None:
-        projector.set_invalid()
         return jsonify({"error": "Invalid placement"}), 400
 
     tile_obj = tile_set[placed_tile_id]
