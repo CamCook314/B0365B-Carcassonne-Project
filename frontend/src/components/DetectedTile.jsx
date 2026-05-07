@@ -12,10 +12,10 @@ export default function DetectedTile({ pendingTile, validPlacements, pendingTile
         {pendingTile ? "DETECTED" : "WAITING"}
       </span>
     </div>
-    <CardBody 
-        pendingTile={pendingTile} 
-        validPlacements={validPlacements} 
-        pendingTileList={pendingTileList} 
+    <CardBody
+        pendingTile={pendingTile}
+        validPlacements={validPlacements}
+        pendingTileList={pendingTileList}
         refresh={refresh} />
   </div>;
 }
@@ -59,7 +59,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
                 <div className="tile-name"><p>Waiting for CV...</p></div>
             </>
         )}
-    </div>; 
+    </div>;
 }
 
 function TileCandidates({ pendingTileList, refresh }) {
