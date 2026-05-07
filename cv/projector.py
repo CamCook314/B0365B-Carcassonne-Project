@@ -250,12 +250,12 @@ def projector_main():
     # Get screens info, projector in extend mode is classed as extra screen
     monitors = screeninfo.get_monitors()
     # Check to make sure monitor is connected
-    while len(monitors) > 1:
+    while len(monitors) == 1:
         print("Projector not connected in extended mode")
         time.sleep(1)
 
     # Get project screen settings
-    projector = monitors[0]
+    projector = monitors[1]
     # Define projector resolution
     proj_w, proj_h = projector.width, projector.height
 
@@ -317,7 +317,6 @@ def projector_main():
                 if valid_flag:
                     canvas = project_valids(canvas, Project_CV.grid_origin, 
                                             Project_CV.grid_tile_size, valid_tiles)
-
             
         # Show image
         cv.imshow("Projector", canvas)
