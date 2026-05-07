@@ -36,6 +36,16 @@ API_BASE = "http://127.0.0.1:1234"
 
 # ── API helpers ───────────────────────────────────────────────────────────────
 
+def _update_remaining_families():
+    """Read the tile bag directly and push remaining family base IDs to CV."""
+    if engine_api.tile_bag_instance is None:
+        return
+    Project_CV.remaining_families = {
+        (int(k.replace("ID", "")) // 4) * 4
+        for k in engine_api.tile_bag_instance.tile_bag.keys()
+    }
+
+
 def _post(path: str, body: dict) -> dict | None:
     try:
         r = requests.post(f"{API_BASE}{path}", json=body, timeout=5)
@@ -78,6 +88,7 @@ def _handle_cv_to_engine():
     if resp and resp.get("status") == "ok":
         print(f"[bridge] /place OK - placed {resp.get('placed')} at {resp.get('position')}")
         Project_CV.game_response = (True, 1)
+        _update_remaining_families()
     else:
         print(f"[bridge] /place error: {resp}")
         Project_CV.game_response = (True, 0)
@@ -164,6 +175,7 @@ def main():
 
         game = engine_api.game_state
         print(f"[bridge] Game started - {len(game.players)} players.\n")
+        _update_remaining_families()
 
         while len(engine_api.tile_bag_instance.tile_bag) > 0:
             for p in game.players: # looping through each player in the game (use p to dictate which player's turn)
@@ -175,6 +187,7 @@ def main():
                 tiles_left = len(engine_api.tile_bag_instance.tile_bag) // 4
                 print(f"[bridge] {p.return_colour()}'s turn - {tiles_left} tiles left")
 
+                Project_CV.expected_meeple_colour = p.return_colour().lower()
 
                 turn_done        = False
                 tile_just_placed = False  # True after /place accepted, until meeple resolved
