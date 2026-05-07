@@ -235,8 +235,11 @@ def _resolve_pending(tile_id):
         return None, "No valid placements for this tile"
 
     pending_tile = f"ID{base_num * 4}"
-    pending_valid = [[x, y, rid] for (x, y), rid in all_valid.items()]
-    return {"tile_id": pending_tile, "valid_positions": pending_valid}, None
+    # Expand to one entry per (position, rotation) so /place can validate any rotation CV detects.
+    pending_valid = [[x, y, rid] for (x, y), rids in all_valid.items() for rid in rids]
+    # Return unique positions only — frontend only needs to know where tiles can go, not which rotation.
+    unique_positions = list({(x, y): [x, y] for x, y, _ in pending_valid}.values())
+    return {"tile_id": pending_tile, "valid_positions": unique_positions}, None
 
 
 @app.route('/pending', methods=['POST'])

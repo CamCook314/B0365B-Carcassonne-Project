@@ -65,7 +65,7 @@ def _handle_tile_checked():
     candidate_ids = [
         rid for _, rid in candidates
         if int(rid.replace("ID", "")) // 4 != pending_family
-    ][:10]
+    ][:20]
 
     print(f"[bridge] tile_checked - tile={tile_id}  candidates={candidate_ids[:3]}...")
     resp = _post("/pending", {"tile_id": tile_id, "candidates": candidate_ids})
