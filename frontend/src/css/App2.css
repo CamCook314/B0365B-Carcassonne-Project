@@ -1,11 +1,10 @@
-
 :root {
   --bg: #2E3440;
   --card: #3B4252;
   --card-alt: #434C5E;
   --border: rgba(255,255,255,0.12);
   --text: #ECEFF4;
-  --dim: rgba(216,222,233,0.5);
+  --dim: rgb(216, 222, 233);
   --accent: #88C0D0;
   --green: #A3BE8C;
   --gold: #EBCB8B;
@@ -18,7 +17,8 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Outfit', monospace;
+  font-size: 16px;
 }
 
 .app {
@@ -37,18 +37,25 @@ body {
   align-items: center;
 }
 
-.header h1 { font-size: 20px; font-weight: 700; }
-.header h1 span { font-weight: 400; color: var(--dim); }
+.header h1 { 
+  font-size: 28px;
+  font-weight: 700; 
+  color: white;
+}
+.header h1 span { 
+  font-weight: 400; 
+  color: var(--dim); 
+}
 
 .header-right {
   display: flex;
   gap: 20px;
   align-items: center;
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .header-stat-label {
-  font-size: 9px;
+  font-size: 12px;
   color: var(--dim);
   text-transform: uppercase;
 }
@@ -77,9 +84,9 @@ body {
 }
 
 .card-header {
-  padding: 10px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
   display: flex;
   justify-content: space-between;
@@ -88,8 +95,8 @@ body {
 
 .card-tag {
   font-family: monospace;
-  font-size: 9px;
-  padding: 2px 6px;
+  font-size: 11px;
+  padding: 3px 8px;
   border-radius: 4px;
   background: rgba(136,192,208,0.15);
   color: var(--accent);
@@ -101,104 +108,135 @@ body {
 .card-tag-red   { background: rgba(191,97,106,0.15);  color: var(--red); }
 
 .card-body {
-  padding: 12px 14px;
+  padding: 14px 16px;
   background-color: var(--bg);
+}
+
+.card-body p { 
+  color: white;
+  font-size: 15px;
 }
 
 /* Players */
 .player-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 4px;
+  gap: 12px;
+  padding: 8px 6px;
   border-radius: 4px;
 }
 
 .player-row.active { background: rgba(136,192,208,0.1); }
 
 .player-avatar {
-  width: 30px; height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 16px;
   color: white;
 }
 
-.player-name { font-size: 13px; font-weight: 600; }
-.player-detail { font-size: 10px; color: var(--dim); font-family: monospace; }
+.player-name { 
+  font-size: 15px;
+  font-weight: 600; 
+}
+.player-detail { 
+  font-size: 12px;
+  color: var(--dim); 
+  font-family: monospace; 
+}
 .player-score {
   margin-left: auto;
   font-family: monospace;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
 }
 
 /* Activity log */
 .log-entry {
   display: flex;
-  gap: 8px;
-  padding: 6px 0;
-  font-size: 12px;
+  gap: 5px;
+  padding: 4px 0;
+  font-size: 14px;
   color: var(--dim);
+  overflow: hidden;
 }
 
-.log-entry + .log-entry { border-top: 1px solid var(--border); }
+.log-entry + .log-entry { border-top: none; }
 .log-entry strong { color: var(--text); }
-.log-turn { font-family: monospace; font-size: 10px; min-width: 24px; color: var(--dim); }
-.log-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
-.log-pts { color: var(--green); font-family: monospace; font-weight: 600; }
+.log-turn { 
+  font-family: monospace; 
+  font-size: 12px;
+  min-width: 28px;
+  color: var(--dim); 
+}
+.log-dot { 
+  width: 8px;
+  height: 8px;
+  border-radius: 50%; 
+  margin-top: 5px;
+  flex-shrink: 0; 
+}
+.log-pts { 
+  color: var(--green); 
+  font-family: monospace; 
+  font-weight: 600; 
+}
 
 /* Metrics */
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  gap: 10px;
 }
 
 .metric {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 10px;
+  padding: 12px;
   text-align: center;
 }
 
 .metric-val {
   font-family: monospace;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
   color: var(--accent);
 }
 
 .metric-label {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--dim);
   text-transform: uppercase;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .tile-preview {
-  width: 70px; height: 70px;
-  margin: 0 auto 10px;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 12px;
   border: 2px solid var(--border);
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
+  font-size: 32px;
   background: var(--bg);
   overflow: hidden;
 }
 
 .tile-name {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   text-align: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
+
 .end-screen {
   display: flex;
   flex-direction: column;
@@ -209,8 +247,13 @@ body {
   gap: 1.5rem;
 }
 
-.end-screen h1 { font-size: 3rem; }
-.end-screen h2 { font-size: 1.5rem; color: var(--dim); }
+.end-screen h1 { 
+  font-size: 3.5rem;
+}
+.end-screen h2 { 
+  font-size: 1.8rem;
+  color: var(--dim); 
+}
 
 .scoreboard {
   border-collapse: collapse;
@@ -221,23 +264,62 @@ body {
 
 .scoreboard th,
 .scoreboard td {
-  padding: 0.75rem 1.5rem;
+  padding: 1rem 2rem;
   text-align: center;
   border-bottom: 1px solid var(--border);
+  font-size: 16px;
 }
 
-.scoreboard th { background: var(--card-alt); font-weight: 600; }
+.scoreboard th { 
+  background: var(--card-alt); 
+  font-weight: 600;
+  font-size: 17px;
+}
 .scoreboard tr:last-child td { border-bottom: none; }
 
 .end-screen button {
-  padding: 0.75rem 2rem;
+  padding: 0.875rem 2.25rem;
   background: var(--accent);
   color: var(--bg);
   border: none;
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .end-screen button:hover { opacity: 0.9; }
+
+.card-events .events-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.event-item {
+  padding: 0.75rem 1rem;
+  background: var(--card-alt);
+  border-radius: 8px;
+}
+
+.event-name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.3rem;
+  color: var(--accent);
+}
+
+.event-desc {
+  font-size: 0.9rem;
+  color: var(--dim);
+  line-height: 1.4;
+}
+
+.event-applied {
+  font-size: 0.85rem;
+  color: var(--dim);
+  margin-top: 0.4rem;
+}

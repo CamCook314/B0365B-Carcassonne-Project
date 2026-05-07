@@ -68,8 +68,17 @@ class gameStateClass:
 		self.remaining_pieces = 72
 		self.current_turn = 1
 		self.structures = []
+
+		# The below are event states. Read by api.build_active_events() to populate the
+		# Active Events panel on the website. Add new event flags here.
+
+		# List of Event objects, each pinned to a random (x, y). Triggered in
+		# place_tile() when a tile is placed on those coords.
 		self.event_pool = []
+		# Set True by Event.extra_turn_event
 		self.extra_turn = False
+		# unrestCheck: set True by Event.unrest_event; read by score_structure() to
+		#   halve city scores until the unrest timer expires.
 		self.unrestCheck = False
 
 		for i in range(4):  # 4 event coords
@@ -235,7 +244,9 @@ class gameStateClass:
 				structure.score_structure(self.unrestCheck)
 				self.structures.remove(structure)
 
+
 	def next_player(self):
+		
 		if self.extra_turn:
 			self.extra_turn = False
 			return

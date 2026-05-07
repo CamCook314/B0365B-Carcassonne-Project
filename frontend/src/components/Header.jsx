@@ -7,11 +7,11 @@ export default function Header({ currentTurn, boardTiles, remaining }) {
     </div>
     <div className="header-right">
       <div>
-        <div>{currentTurn}</div>
+        <div style={{ color: "var(--green)", fontWeight: 600 }}>{currentTurn}</div>
         <div className="header-stat-label">Turn</div>
       </div>
       <div>
-        <div>
+        <div style={{ color: "var(--green)", fontWeight: 600 }}>
           {boardTiles.length}/{boardTiles.length + remaining}
         </div>
         <div className="header-stat-label">Tiles</div>

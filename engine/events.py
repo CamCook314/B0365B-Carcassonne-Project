@@ -1,5 +1,16 @@
 import random
 
+# Note: To add a new event:
+'''
+1. Add its name to the list in choose_random_event() so the spawner can pick it.
+2. Add an `elif self.name == "<name>": self.<name>_event(game)` branch in play().
+3. Define <name>_event(self, game) — set any flags on `game` your effect needs
+(add new fields to gameStateClass.__init__ in data.py if needed).
+4. If it has a duration, define check_<name>(self, game) and call it from
+gameStateClass.next_player() each turn.
+5. Have it in the UI by editing build_active_events() in api.py, append
+a {"name", "description", "player_index"?} dict when your flag is active.
+'''
 class Event:
 
     def __init__(self, coords):

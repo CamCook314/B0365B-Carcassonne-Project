@@ -50,6 +50,33 @@ pending_placement = None     # {"x", "y", "tile_id", "tile"} — set by /place, 
 game_over = False            # flipped True by /end after final scoring
 
 
+def build_active_events(game):
+    events = []
+
+    if game.extra_turn:
+        events.append({
+            "name": "Extra Turn",
+            "description": "The court astrologer reads good omens in the night sky. Player gets an extra turn.",
+            "player_index": game.currentIndex,
+        })
+
+    for ev in game.event_pool:
+        if ev.name == "volcano" and getattr(ev, "active", False):
+            events.append({
+                "name": "Volcano",
+                "description": "Smoke pours from the marked land and the earth groans beneath the realm. Surround the marked tile within 8 turns or all meeples are removed.",
+                "coords": list(ev.coords),
+            })
+
+    if getattr(game, "unrestCheck", False):
+        events.append({
+            "name": "Unrest",
+            "description": "Whispers of revolt fill the streets and meeples live in fear. Cities score half points for the next 4 turns.",
+        })
+
+    return events
+
+
 @app.route('/gamestate', methods=['GET'])
 def get_gamestate():
     if game_state is None:
@@ -130,7 +157,40 @@ def get_gamestate():
         "pending_candidates": pending_candidates,
         "pending_placement": pending_placement_serialised,
         "game_over": game_over,
+        "active_events": build_active_events(game_state),
     })
+
+
+@app.route('/debug/event', methods=['POST'])
+def debug_event():
+    """Force-toggle event flags for visual testing of the Active Events panel.
+
+    Body: {"name": "extra_turn" | "volcano" | "unrest", "enabled": true | false}
+    Volcano repurposes the first Event in event_pool by renaming it and
+    flipping its active flag.
+    """
+    if game_state is None:
+        return jsonify({"error": "Game not started"}), 400
+
+    data = request.get_json() or {}
+    name = data.get("name")
+    enabled = data.get("enabled", True)
+    enabled = bool(enabled)
+
+    if name == "extra_turn":
+        game_state.extra_turn = enabled
+    elif name == "unrest":
+        game_state.unrestCheck = enabled
+    elif name == "volcano":
+        if not game_state.event_pool:
+            return jsonify({"error": "No events in pool"}), 400
+        ev = game_state.event_pool[0]
+        ev.name = "volcano"
+        ev.active = enabled
+    else:
+        return jsonify({"error": f"Unknown event name: {name}"}), 400
+
+    return jsonify({"status": "ok", "name": name, "enabled": enabled})
 
 
 @app.route('/start', methods=['POST'])
@@ -259,17 +319,17 @@ def change_pending():
 
     print(f"received tile: {selected_tile}")
 
-    success, result = _resolve_pending(selected_tile)
+    result, err = _resolve_pending(selected_tile)
 
-    if not success:
-        return jsonify({"error": result}), 400
+    if err:
+        return jsonify({"error": err}), 400
 
     return jsonify(result)
 
 
 @app.route('/pending/clear', methods=['POST'])
 def clear_pending():
-    global pending_tile, pending_valid, pending_candidatesw
+    global pending_tile, pending_valid, pending_candidates
     pending_tile = None
     pending_valid = []
     pending_candidates = []

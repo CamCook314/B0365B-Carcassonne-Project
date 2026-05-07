@@ -60,6 +60,9 @@ export default function App2() {
   // Pending placement awaiting a meeple decision
   const pendingPlacement = gameState?.pending_placement || null;
 
+  // Active events (extra turn, volcano, unrest) for the events panel
+  const activeEvents = gameState?.active_events || [];
+
   if (!loading && !gameState) {
     return <EntryScreen error={error} handleStart={handleStart} />;
   }
@@ -91,6 +94,7 @@ export default function App2() {
         pendingTile={pendingTile}
         pendingTileList={pendingTileList}
         pendingPlacement={pendingPlacement}
+        activeEvents={activeEvents}
         history={history}
         refresh={async () => {
           await immediateFetch();
