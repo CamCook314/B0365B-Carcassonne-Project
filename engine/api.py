@@ -395,6 +395,40 @@ def place_tile():
         "position": [x, y],
     }), 200
 
+@app.route('/rotate', methods=['POST'])
+def rotate_tile():
+    """
+    called from frontend to rotate a placed tile
+    body: 
+    {
+        x: int,
+        y: int
+    }
+    """
+    global game_state, pending_placement
+
+    if game_state is None:
+        return jsonify({"error": "Game not started"}), 400
+    if pending_placement is None:
+        return jsonify({"error": "No pending placement"}), 400
+
+    data = request.get_json()
+    
+    x, y = data.get("x"), data.get("y")
+    if x is None or y is None:
+        return jsonify({"error": "Missing x or y"}), 400
+    # find the tile at (x, y)
+    tile = game_state.get_board_xy().get((x, y))
+    if tile is None:
+        return jsonify({"error": f"No tile found at ({x}, {y})"}), 400
+    # rotate the tile
+    # TODO: how do you rotate the tile ???
+    
+    return jsonify({
+        "status": "ok",
+        "position": [x, y],
+    }), 200
+
 
 @app.route('/meeple', methods=['POST'])
 def place_meeple():
