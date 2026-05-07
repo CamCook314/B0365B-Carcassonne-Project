@@ -75,7 +75,7 @@ function TileCandidates({ pendingTileList, refresh }) {
         }
         setError("");
         setManualInput("");
-        overridePendingTile(`ID${num}`);
+        overridePendingTile(`${num}`);
         refresh();
     }
 
