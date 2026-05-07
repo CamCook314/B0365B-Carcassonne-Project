@@ -328,6 +328,7 @@ def place_tile():
     tile_bag_instance.remove_tile(placed_tile_id)
     projector.clear_proj_valid() # Clear projector valid tiles
     projector.clear_invalid()
+    projector.set_valid()
 
     pending_tile = None
     pending_valid = []

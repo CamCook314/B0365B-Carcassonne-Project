@@ -301,14 +301,13 @@ def projector_main():
                     elif key == "GOOD_TILE":
                         canvas = event_good_tile(canvas, Project_CV.grid_origin, 
                                             round(Project_CV.grid_tile_size), value)
+            with valid_b_lock:
+                if valid_border:
+                    canvas = set_valid_border(canvas, proj_w, proj_h)
 
             with invalid_lock:
                 if invalid_border:
                     canvas = set_invalid_border(canvas, proj_w, proj_h)
-
-            with valid_b_lock:
-                if valid_border:
-                    canvas = set_valid_border(canvas, proj_w, proj_h)
             
             with event_lock:
                 if event_border:
