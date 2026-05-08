@@ -1,7 +1,7 @@
 ## setup
 import torch
 import torch.nn.functional as F
-import open_clip
+from torchvision import transforms as T
 from PIL import Image, ImageEnhance
 from pathlib import Path
 import platform
@@ -12,13 +12,34 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-def model_setup():
-    model_name = 'ViT-B-32'
-    pretrained_model = 'laion2b_s34b_b79k'
-    model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained_model)
-    model.eval()
 
-    return (model, preprocess)
+class _DINOv2Encoder:
+    """Wraps a DINOv2 backbone and exposes encode_image() for drop-in compatibility."""
+    def __init__(self, model):
+        self._model = model
+
+    def encode_image(self, tensor: torch.Tensor) -> torch.Tensor:
+        outputs = self._model(pixel_values=tensor)
+        return outputs.last_hidden_state[:, 0, :]  # CLS token, shape (B, 768)
+
+    def eval(self):
+        self._model.eval()
+        return self
+
+
+_DINOV2_PREPROCESS = T.Compose([
+    T.Resize(256, interpolation=T.InterpolationMode.BICUBIC),
+    T.CenterCrop(224),
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
+
+
+def model_setup():
+    from transformers import AutoModel
+    backbone = AutoModel.from_pretrained("facebook/dinov2-base")
+    backbone.eval()
+    return _DINOv2Encoder(backbone), _DINOV2_PREPROCESS
 
 ## convert image to embedding
 # model and preprocess from model_setup()
@@ -99,6 +120,54 @@ def load_bias() -> torch.Tensor | None:
         return bias
     print("No bias.pt found — running without bias correction.")
     return None
+
+
+def load_classifier() -> dict | None:
+    """Load trained linear classifier head. Returns None if cv/classifier_head.pt doesn't exist."""
+    path = Path(__file__).parent / "classifier_head.pt"
+    if not path.exists():
+        return None
+    ckpt = torch.load(str(path), weights_only=True)
+    head = torch.nn.Linear(768, ckpt["num_classes"])
+    head.weight.data = ckpt["weight"]
+    head.bias.data   = ckpt["bias"]
+    head.eval()
+    print(f"Loaded classifier head ({ckpt['num_classes']} families)")
+    return {"head": head, "label_to_family": ckpt["label_to_family"]}
+
+
+def match_image_classifier(path: str, model, preprocess, classifier: dict,
+                            remaining_families: set | None = None) -> list[tuple[float, str]]:
+    """Classify a tile image using the trained linear head.
+
+    Averages logits over all 4 rotations so the prediction is rotation-invariant.
+    Returns the same [(score, tile_id), ...] format as match_image, ranked by confidence.
+    tile_id is the family base ID (e.g. 'ID0', 'ID4') — match_rotation resolves the exact rotation.
+    """
+    head             = classifier["head"]
+    label_to_family  = classifier["label_to_family"]
+
+    image = Image.open(path).convert("RGB")
+    logits_sum = None
+    for angle in [0, 90, 180, 270]:
+        img    = image.rotate(angle) if angle > 0 else image
+        tensor = preprocess(img).unsqueeze(0)
+        with torch.no_grad():
+            emb    = model.encode_image(tensor).squeeze(0)
+            logits = head(emb.unsqueeze(0)).squeeze(0)
+        logits_sum = logits if logits_sum is None else logits_sum + logits
+
+    probs = F.softmax(logits_sum, dim=0)
+
+    results = []
+    for label_idx, prob in enumerate(probs):
+        family_base = label_to_family[label_idx]
+        if remaining_families is not None and family_base not in remaining_families:
+            continue
+        results.append((prob.item(), f"ID{family_base}"))
+
+    results.sort(reverse=True)
+    return results
 
 
 def _score_query_vs_embeddings(Q: torch.Tensor,
