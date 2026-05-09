@@ -16,7 +16,7 @@ class player:
 		self.meeples = 7
 		self.score = 0
 
-	def ability(self, game):
+	def ability(self,structure, game):
 		pass
 
 	def return_colour(self):
@@ -28,36 +28,54 @@ class farmer(player): #gets an extra point when scoring roads
 	def __init__(self):
 		super().__init__("yellow")
 
-	def ability(self, game):
-		self.score += 1
+	def ability(self, structure, game):
+		if structure.type == 1:
+			self.score += 1
 
 class knight(player): #gets an extra 2 points when scoring cities
 	def __init__(self):
 		super().__init__("blue")
 	
-	def ability(self, game):
+	def ability(self, structure, game):
+		if structure.type == 2:
+			self.score += 2
 		pass
 
 class lord(player): # steals point from random player with > 1 score when scoring cities
 	def __init__(self):
 		super().__init__("red")
 
-	def ability(self, game):
+	def ability(self, structure, game):
+		play_list = []
+		if structure.type == 2:
+			for play in game.players:
+				if play.score >= 1:
+					play_list.append(play)
+			self.score += 1
+			choice = random.choice(play_list)	
+			choice.score -= 1	
+				
+
+
 		pass
 
 class merchant(player): #starts with 3 points
 	def __init__(self):
 		super().__init__("green")
-		super().score = 3
+		self.score = 3
 
-	def ability(self, game):
+	def ability(self, structure, game):
 		pass
 
 class necrobinder(player): #immune to negative tile effects
 	def __init__(self):
 		super().__init__("black")
 
-	def ability(self, game):
+	def ability(self, structure, game):
+		for tile in structure.tiles_used:
+			tile.bad_tile = False
+
+		
 		pass
 
 
@@ -291,7 +309,7 @@ class gameStateClass:
 			self.structures.append(temp_struct)
 		for structure in self.structures:
 			if structure.check_completed(self.board):
-				structure.score_structure(self.unrestCheck)
+				structure.score_structure(self.unrestCheck, self)
 				self.structures.remove(structure)
 
 
@@ -578,7 +596,7 @@ class structures:
 						break
 		return connections
 
-	def score_structure(self, unrest):
+	def score_structure(self, unrest, game):
 		"""
 		This method scores a structure once it is deemed completed
 		"""
@@ -606,6 +624,7 @@ class structures:
 
 		for player in self.players:
 			player.score += temp_score
+			player.ability(self, game)
 		pass
 
 	def check_completed(self, board):
