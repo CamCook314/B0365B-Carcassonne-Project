@@ -20,7 +20,7 @@ class Event:
         self.turn = 0
 
     def choose_random_event(self):
-        return random.choice(["extra turn", "volcano", "plague"])
+        return random.choice(["extra turn", "volcano", "unrest"])
 
     def play(self, game):
         if self.name == "extra turn":

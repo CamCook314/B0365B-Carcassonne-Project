@@ -48,11 +48,12 @@ class lord(player): # steals point from random player with > 1 score when scorin
 class merchant(player): #starts with 3 points
 	def __init__(self):
 		super().__init__("green")
+		super().score = 3
 
 	def ability(self, game):
 		pass
 
-class necrobinder(player):
+class necrobinder(player): #immune to negative tile effects
 	def __init__(self):
 		super().__init__("black")
 
@@ -75,6 +76,7 @@ class gameStateClass:
 		self.remaining_pieces = 72
 		self.current_turn = 1
 		self.structures = []
+		self.river_struct = [] # will contain coordinates for river tiles for various uses
 
 		# The below are event states. Read by api.build_active_events() to populate the
 		# Active Events panel on the website. Add new event flags here.
@@ -88,15 +90,7 @@ class gameStateClass:
 		#   halve city scores until the unrest timer expires.
 		self.unrestCheck = False
 
-		for i in range(4):  # 4 event coords
-			while True:
-				randx = random.randint(-5, 5)
-				randy = random.randint(-5, 5)
-
-				if (randx, randy) not in [e.coords for e in self.event_pool]: #unique coords
-					self.event_pool.append(Event((randx, randy)))
-					print(Event((randx, randy)))
-					break
+		
 			
 
 	# converts x,y logical coordinates to array indexes using offsets.
@@ -115,6 +109,36 @@ class gameStateClass:
 		array_row = -y + self.row_offset
 		array_col = x + self.col_offset
 		return array_row, array_col
+	
+
+	def event_init(self):
+		for i in range(4):  # 4 event coords
+			max_x = 0
+			min_x = 0
+			max_y = 0
+			min_y = 0
+			for (j,k) in self.river_struct:
+				if j > 0:
+					if j > max_x:
+						max_x = j
+				elif j < 0:
+					if j < min_x:
+						min_x = j
+				if k > 0:
+					if k > max_y:
+						max_y = k
+				elif k < 0:
+					if k < min_y:
+						min_y = k
+			while True:
+				randx = random.randint(min_x - 5, max_x + 5) #max 5 tiles away from any river tile
+				randy = random.randint(min_y - 5, max_y + 5)
+
+				if (randx, randy) not in [e.coords for e in self.event_pool] and (randx, randy) not in self.river_struct: #unique coords
+					self.event_pool.append(Event((randx, randy)))
+					print(Event((randx, randy)))
+					break
+
 
 	# expands the board when a tile placement would fall outside the current
 	# array bounds. works on array indexes after converting from x,y coordinates.
@@ -163,10 +187,18 @@ class gameStateClass:
 		self.board[array_row][array_col] = tile
 		self.remaining_pieces -= 1
 
+		if tile.up == 3 or tile.down == 3 or tile.right == 3 or tile.left == 3:
+			self.river_struct.append((x,y))
+
+		if len(self.river_struct) == 12:
+			self.event_init()
+
 		tile.player_placed = self.current_player()
 		for event in self.event_pool:
 			if event.coords == (x, y):
 				event.play(self)
+		
+
 
 
 	def remove_tile(self, x, y, tile):
