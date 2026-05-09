@@ -24,8 +24,8 @@ Workflow:
     7. Repeat for every tile × rotation you want to cover.  Each capture
        overwrites the previous game_ref for that ID.
     8. Press q to finish.  Run:
-           python cv/image_match.py --dir cv/game_refs --augment
-       to build cv/game_embeddings.pt from your captured photos.
+           python cv/image_match.py --dir cv/game_refs --augmentA
+       to build cv/game_embeddinges.pt from your captured photos.
 
 You do NOT need all 336 tiles — even 40–60 commonly-used tiles noticeably
 improve rotation detection.  The studio embeddings fill in as fallback for
