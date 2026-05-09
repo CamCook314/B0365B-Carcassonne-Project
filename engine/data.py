@@ -403,6 +403,38 @@ class gameStateClass:
 		if not board_empty and not has_neighbor:
 			return False
 
+		# strictly only allow 1 continuous river during starting phase
+		tile_has_river = (tile.up == 3 or tile.down == 3
+		                  or tile.left == 3 or tile.right == 3)
+		if tile_has_river:
+			river_connects = False
+			for (nr, nc), opposite_side, my_edge in neighbors.values():
+				if my_edge != 3:
+					continue
+				if nr < 0 or nr >= len(self.board) or nc < 0 or nc >= len(self.board[0]):
+					continue
+				neighbor = self.board[nr][nc]
+				if neighbor is None:
+					continue
+				if getattr(neighbor, opposite_side) == 3:
+					river_connects = True
+					break
+
+			if not river_connects:
+				any_river_on_board = False
+				for row in self.board:
+					for placed in row:
+						if placed is None:
+							continue
+						if (placed.up == 3 or placed.down == 3
+						        or placed.left == 3 or placed.right == 3):
+							any_river_on_board = True
+							break
+					if any_river_on_board:
+						break
+				if any_river_on_board:
+					return False
+
 		return True
 
 	# returns a dictionary of placed tiles as (x, y) graphical coordinates
