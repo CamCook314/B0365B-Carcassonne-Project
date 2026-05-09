@@ -85,6 +85,21 @@ def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
     return crop
 
 
+# Returns True if a meeple can be placed on a given side of a given tile.
+# Sides: "up", "down", "left", "right", "centre".
+# Note: Monestary only accepts middle. Other sides need a road or city edge.
+# Edge values: 0 = field, 1 = road, 2 = city, 3 = river.
+def is_valid_meeple_side(tile, side):
+    if side == "centre":
+        return tile.attribute == 2
+
+    if side not in ("up", "down", "left", "right"):
+        return False
+
+    edge = getattr(tile, side)
+    return edge == 1 or edge == 2
+
+
 def extract_tile_crop(frame, contour, proc_scale,
                       board_angle_deg=0.0, tile_size_px=None, padding=0.85):
     """Return a rotation-corrected square crop of the tile from the full-res frame.
