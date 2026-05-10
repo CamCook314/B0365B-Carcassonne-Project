@@ -99,8 +99,8 @@ def gameStart():
 
 #initialises internal board system
 
-def initialiseBoard(num_players):
-    players = [player(i) for i in range(num_players)]
+def initialiseBoard(players):
+    #players = [player(i) for i in range(num_players)]
 
     game = gameStateClass(players)
 
