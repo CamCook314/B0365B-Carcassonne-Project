@@ -26,7 +26,7 @@ class player:
 
 class farmer(player): #gets an extra point when scoring roads
 	def __init__(self):
-		super().__init__("yellow")
+		super().__init__(3)
 
 	def ability(self, structure, game):
 		if structure.type == 1:
@@ -34,7 +34,7 @@ class farmer(player): #gets an extra point when scoring roads
 
 class knight(player): #gets an extra 2 points when scoring cities
 	def __init__(self):
-		super().__init__("blue")
+		super().__init__(1)
 	
 	def ability(self, structure, game):
 		if structure.type == 2:
@@ -43,7 +43,7 @@ class knight(player): #gets an extra 2 points when scoring cities
 
 class lord(player): # steals point from random player with > 1 score when scoring cities
 	def __init__(self):
-		super().__init__("red")
+		super().__init__(0)
 
 	def ability(self, structure, game):
 		play_list = []
@@ -61,7 +61,7 @@ class lord(player): # steals point from random player with > 1 score when scorin
 
 class merchant(player): #starts with 3 points
 	def __init__(self):
-		super().__init__("green")
+		super().__init__(2)
 		self.score = 3
 
 	def ability(self, structure, game):
@@ -69,7 +69,7 @@ class merchant(player): #starts with 3 points
 
 class necrobinder(player): #immune to negative tile effects
 	def __init__(self):
-		super().__init__("black")
+		super().__init__(4)
 
 	def ability(self, structure, game):
 		for tile in structure.tiles_used:

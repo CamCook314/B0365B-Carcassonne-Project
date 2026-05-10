@@ -21,6 +21,7 @@ from OldMain import (initialiseBoard, get_valid_placements_all_rotations, STARTI
 # corruption (e.g. meeples rendering in the wrong position).
 import inspect
 from data import gameStateClass as _gs
+from data import farmer, knight, lord, merchant, necrobinder
 _pm_params = list(inspect.signature(_gs.place_meeple).parameters)
 if _pm_params != ["self", "tile", "direction"]:
     raise RuntimeError(
@@ -214,18 +215,35 @@ def start_game():
     if data is None or "players" not in data:
         return jsonify({"error": "Missing 'players' field"}), 400
 
-    num_players = data["players"]
-    if not isinstance(num_players, int) or num_players < 2 or num_players > 5:
-        return jsonify({"error": "Players must be between 2 and 5"}), 400
+    num_players_data = data["players"]
 
-    game_state = initialiseBoard(num_players)
+    class_map = {
+        "farmer": farmer,
+        "lord": lord,
+        "knight": knight,
+        "merchant": merchant,
+        "necrobinder": necrobinder
+    }
+
+
+    if not isinstance(num_players_data, list) or len(num_players_data) < 2 or len(num_players_data) > 5:
+        return jsonify({"error": "Players must be between 2 and 5 or a list"}), 400
+
+    players = []
+    for name in num_players_data:
+        clas = class_map.get(name.lower())
+        if clas is None:
+            return jsonify({"error": f"Unknown player class: '{name}'"}), 400
+        players.append(clas())
+
+    game_state = initialiseBoard(players)
     tile_bag_instance = tile_bag.tile_bag()
     empty_bag_instance = tile_bag.empty_bag()
 
     pending_tile = None
     pending_valid = []
 
-    return jsonify({"status": "ok", "players": num_players}), 201
+    return jsonify({"status": "ok", "players": num_players_data}), 201
 
 
 def _resolve_pending(tile_id):
