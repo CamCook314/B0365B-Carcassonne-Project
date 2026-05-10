@@ -36,6 +36,23 @@ meeple_skip            = False   # CV sets on timeout/skip; bridge clears after 
 meeple_handled         = False   # Set by bridge when website button handled the meeple/skip
 expected_meeple_colour = None    # Bridge sets to current player colour at start of each turn
 remaining_families     = None    # Bridge updates after each placement; set of family base IDs still in bag
+valid_meeple_sides     = None    # Bridge sets after placement: list of valid sides for the tile
+last_id_crop_path      = None    # Path to the most recently saved identification crop (set by CV, read by bridge)
+
+
+_SIDE_VECTORS = {
+    "up":     ( 0.0, -1.0),
+    "down":   ( 0.0,  1.0),
+    "left":   (-1.0,  0.0),
+    "right":  ( 1.0,  0.0),
+    "centre": ( 0.0,  0.0),
+}
+
+def _nearest_valid_side(dx, dy, valid_sides):
+    """Return the side from valid_sides whose direction best matches the (dx, dy) vector."""
+    mag = float(np.hypot(dx, dy))
+    ndx, ndy = (dx / mag, dy / mag) if mag > 1e-6 else (0.0, 1.0)
+    return max(valid_sides, key=lambda s: ndx * _SIDE_VECTORS[s][0] + ndy * _SIDE_VECTORS[s][1])
 
 
 def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
@@ -285,7 +302,7 @@ def cv_main_loop():
     # the growth counter, so one flickering frame doesn't undo 2+ growth frames.
     non_growth_count = 0
 
-    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle
+    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, valid_meeple_sides, last_id_crop_path
 
     print("Place the first tile on the board — it will be detected automatically. Press 'b' to force-confirm.")
 
@@ -361,6 +378,7 @@ def cv_main_loop():
                                         tile_size_px=grid_tracker.tile_size_px)
                 path = os.path.join(CROPS_DIR, f"tile_{save_count:04d}.png")
                 cv.imwrite(path, crop)
+                last_id_crop_path = path
                 print(f"Saved origin tile: {path}")
                 save_count += 1
 
@@ -473,6 +491,7 @@ def cv_main_loop():
                                                      tile_size_px=grid_tracker.tile_size_px)
                             path = os.path.join(CROPS_DIR, f"tile_{save_count:04d}.png")
                             cv.imwrite(path, crop)
+                            last_id_crop_path     = path
                             print(f"Saved tile: {path}")
                             save_count           += 1
                             tile_saved            = True
@@ -792,9 +811,28 @@ def cv_main_loop():
                         print(f"  [meeple] colour={colour}  dir={direction}  "
                               f"stable={meeple_detect_count}/{MEEPLE_CONFIRM_FRAMES}")
                         if meeple_detect_count >= MEEPLE_CONFIRM_FRAMES:
-                            print(f"Meeple confirmed: {colour} at {direction}.")
+                            # Snap to nearest valid side when detection confidence is low.
+                            # Confidence < 0.75 means the meeple centroid is less than
+                            # 75% of the crop half-width from centre — common for "centre"
+                            # readings on non-monastery tiles and edge meeples placed
+                            # near the tile boundary.  High-confidence readings (player
+                            # clearly on one side) are passed through unchanged so the
+                            # engine can still catch genuinely invalid placements.
+                            final_direction = direction
+                            if valid_meeple_sides:
+                                conf    = meeple_dbg.get("confidence", 1.0)
+                                raw_dx  = meeple_dbg.get("dx", 0)
+                                raw_dy  = meeple_dbg.get("dy", 0)
+                                if conf < 0.75:
+                                    snapped = _nearest_valid_side(raw_dx, raw_dy,
+                                                                   valid_meeple_sides)
+                                    if snapped != direction:
+                                        print(f"  Meeple conf={conf:.2f} < 0.75 "
+                                              f"→ snapped {direction} → {snapped}")
+                                    final_direction = snapped
+                            print(f"Meeple confirmed: {colour} at {final_direction}.")
                             meeple_colour    = colour
-                            meeple_direction = direction
+                            meeple_direction = final_direction
                             meeple_placed    = True
                     else:
                         meeple_detect_count     = 0

@@ -276,4 +276,10 @@ def detect_meeple(proc_frame, slot_px, tile_size_px,
     else:
         direction = "down" if dy > 0 else "up"
 
+    # Confidence: fraction of crop half-width the meeple is displaced from centre.
+    # 0 = exactly at centre, 1 = at the crop edge.  < 0.75 triggers valid-side snapping.
+    dbg["confidence"] = float(np.hypot(dx, dy)) / (tile_size_px * CROP_HALF_FRAC)
+    dbg["dx"] = dx
+    dbg["dy"] = dy
+
     return best_colour, direction, dbg

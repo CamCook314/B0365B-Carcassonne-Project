@@ -15,6 +15,7 @@ Then polls CV globals every 100 ms and makes the appropriate API calls:
 """
 
 import sys
+import shutil
 import os
 import time
 import threading
@@ -45,6 +46,25 @@ def _update_remaining_families():
         (int(k.replace("ID", "")) // 4) * 4
         for k in engine_api.tile_bag_instance.tile_bag.keys()
     }
+
+
+LIVE_ID_CROPS_DIR = ROOT / "cv" / "live_id_crops"
+
+def _save_id_crop_as_game_ref(confirmed_id: str):
+    """Copy the last identification crop to cv/live_id_crops/<confirmed_id>.jpg.
+
+    Stored separately from game_refs so they don't corrupt rotation training
+    (the image content may be at a different orientation than the filename implies).
+    train.py uses both directories for family classification; train_rotation.py
+    only uses game_refs where rotation labels are verified.
+    """
+    src = Project_CV.last_id_crop_path
+    if not src or not Path(src).exists():
+        return
+    LIVE_ID_CROPS_DIR.mkdir(exist_ok=True)
+    dst = LIVE_ID_CROPS_DIR / f"{confirmed_id}.jpg"
+    shutil.copy2(src, dst)
+    print(f"[bridge] Saved id crop → live_id_crops/{confirmed_id}.jpg")
 
 
 def _post(path: str, body: dict) -> dict | None:
@@ -87,9 +107,23 @@ def _handle_cv_to_engine():
     resp = _post("/place", {"x": gx, "y": gy, "rotation_id": tile_id})
 
     if resp and resp.get("status") == "ok":
-        print(f"[bridge] /place OK - placed {resp.get('placed')} at {resp.get('position')}")
+        confirmed_id = resp.get("placed")
+        print(f"[bridge] /place OK - placed {confirmed_id} at {resp.get('position')}")
         Project_CV.game_response = (True, 1)
         _update_remaining_families()
+        _save_id_crop_as_game_ref(confirmed_id)
+
+        # Compute which sides of the placed tile are valid for meeple placement
+        # and pass to CV so ambiguous detections can snap to the nearest valid side.
+        if engine_api.pending_placement is not None:
+            tile = engine_api.pending_placement["tile"]
+            Project_CV.valid_meeple_sides = [
+                s for s in ("up", "down", "left", "right", "centre")
+                if Project_CV.is_valid_meeple_side(tile, s)
+            ]
+            print(f"[bridge] valid meeple sides: {Project_CV.valid_meeple_sides}")
+        else:
+            Project_CV.valid_meeple_sides = None
     else:
         print(f"[bridge] /place error: {resp}")
         Project_CV.game_response = (True, 0)
@@ -113,9 +147,10 @@ def _handle_meeple_placed():
             print(f"[bridge] /meeple/skip fallback OK - turn={skip_resp.get('turn')}")
         else:
             print(f"[bridge] /meeple/skip fallback error: {skip_resp}")
-    Project_CV.meeple_placed    = False
-    Project_CV.meeple_colour    = None
-    Project_CV.meeple_direction = None
+    Project_CV.meeple_placed        = False
+    Project_CV.meeple_colour        = None
+    Project_CV.meeple_direction     = None
+    Project_CV.valid_meeple_sides   = None
 
 
 def _handle_meeple_skip():
@@ -125,7 +160,8 @@ def _handle_meeple_skip():
         print(f"[bridge] /meeple/skip OK - turn={resp.get('turn')}  player={resp.get('current_player')}")
     else:
         print(f"[bridge] /meeple/skip error: {resp}")
-    Project_CV.meeple_skip = False
+    Project_CV.meeple_skip          = False
+    Project_CV.valid_meeple_sides   = None
 
 
 # ── Thread targets ─────────────────────────────────────────────────────────────
@@ -188,54 +224,53 @@ def main():
         _update_remaining_families()
 
         while len(engine_api.tile_bag_instance.tile_bag) > 0:
-            for p in game.players: # looping through each player in the game (use p to dictate which player's turn)
+            # Read current player from the engine each turn so that game events
+            # like extra_turn (which keep currentIndex the same) are respected.
+            p = game.players[engine_api.game_state.currentIndex]
 
-                # breaks if there are no pieces left, the game should end
-                if len(engine_api.tile_bag_instance.tile_bag) == 0:
-                    break
+            tiles_left = len(engine_api.tile_bag_instance.tile_bag) // 4
+            print(f"[bridge] {p.return_colour()}'s turn - {tiles_left} tiles left")
 
-                tiles_left = len(engine_api.tile_bag_instance.tile_bag) // 4
-                print(f"[bridge] {p.return_colour()}'s turn - {tiles_left} tiles left")
+            Project_CV.expected_meeple_colour = p.return_colour().lower()
 
-                Project_CV.expected_meeple_colour = p.return_colour().lower()
+            turn_done        = False
+            tile_just_placed = False  # True after /place accepted, until meeple resolved
 
-                turn_done        = False
-                tile_just_placed = False  # True after /place accepted, until meeple resolved
+            while not turn_done:
+                try:
+                    if Project_CV.tile_checked:
+                        _handle_tile_checked()
 
-                while not turn_done:
-                    try:
-                        if Project_CV.tile_checked:
-                            _handle_tile_checked()
+                    if Project_CV.cv_to_engine:
+                        _handle_cv_to_engine()
+                        # If the engine accepted the placement, pending_placement is now set.
+                        # Track this so we can detect when the website resolves the meeple.
+                        tile_just_placed = engine_api.pending_placement is not None
 
-                        if Project_CV.cv_to_engine:
-                            _handle_cv_to_engine()
-                            # If the engine accepted the placement, pending_placement is now set.
-                            # Track this so we can detect when the website resolves the meeple.
-                            tile_just_placed = engine_api.pending_placement is not None
+                    # Website button pressed: pending_placement cleared without CV flags being set
+                    if tile_just_placed and engine_api.pending_placement is None:
+                        print("[bridge] Meeple/skip handled via website — unblocking CV.")
+                        Project_CV.meeple_placed        = False   # clear in case safety also fired
+                        Project_CV.meeple_skip          = False
+                        Project_CV.meeple_handled       = True
+                        Project_CV.valid_meeple_sides   = None
+                        turn_done        = True
+                        tile_just_placed = False
 
-                        # Website button pressed: pending_placement cleared without CV flags being set
-                        if tile_just_placed and engine_api.pending_placement is None:
-                            print("[bridge] Meeple/skip handled via website — unblocking CV.")
-                            Project_CV.meeple_placed  = False   # clear in case safety also fired
-                            Project_CV.meeple_skip    = False
-                            Project_CV.meeple_handled = True
-                            turn_done        = True
-                            tile_just_placed = False
+                    elif Project_CV.meeple_placed:
+                        _handle_meeple_placed()
+                        turn_done        = True
+                        tile_just_placed = False
 
-                        elif Project_CV.meeple_placed:
-                            _handle_meeple_placed()
-                            turn_done        = True
-                            tile_just_placed = False
+                    elif Project_CV.meeple_skip:
+                        _handle_meeple_skip()
+                        turn_done        = True
+                        tile_just_placed = False
 
-                        elif Project_CV.meeple_skip:
-                            _handle_meeple_skip()
-                            turn_done        = True
-                            tile_just_placed = False
+                except Exception as e:
+                    print(f"[bridge] Poll error: {e}")
 
-                    except Exception as e:
-                        print(f"[bridge] Poll error: {e}")
-
-                    time.sleep(0.1)
+                time.sleep(0.1)
 
         print("[bridge] Tile bag empty - game over")
 
