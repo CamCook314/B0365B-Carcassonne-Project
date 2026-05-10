@@ -101,6 +101,65 @@ def load_bias() -> torch.Tensor | None:
     return None
 
 
+def load_classifier() -> dict | None:
+    """Load trained classifier head (linear or MLP). Returns None if cv/classifier_head.pt doesn't exist."""
+    path = Path(__file__).parent / "classifier_head.pt"
+    if not path.exists():
+        return None
+    ckpt = torch.load(str(path), weights_only=True)
+    num_classes = ckpt["num_classes"]
+    if ckpt.get("architecture") == "mlp":
+        head = torch.nn.Sequential(
+            torch.nn.Linear(768, 256),
+            torch.nn.GELU(),
+            torch.nn.Dropout(0.3),
+            torch.nn.Linear(256, num_classes),
+        )
+        head.load_state_dict(ckpt["head_state_dict"])
+        print(f"Loaded MLP classifier head ({num_classes} families)")
+    else:
+        head = torch.nn.Linear(768, num_classes)
+        head.weight.data = ckpt["weight"]
+        head.bias.data   = ckpt["bias"]
+        print(f"Loaded linear classifier head ({num_classes} families)")
+    head.eval()
+    return {"head": head, "label_to_family": ckpt["label_to_family"]}
+
+
+def match_image_classifier(path: str, model, preprocess, classifier: dict,
+                            remaining_families: set | None = None) -> list[tuple[float, str]]:
+    """Classify a tile image using the trained head.
+
+    Averages logits over all 4 rotations so the prediction is rotation-invariant.
+    Returns the same [(score, tile_id), ...] format as match_image, ranked by confidence.
+    tile_id is the family base ID (e.g. 'ID0', 'ID4') — match_rotation resolves the exact rotation.
+    """
+    head            = classifier["head"]
+    label_to_family = classifier["label_to_family"]
+
+    image = Image.open(path).convert("RGB")
+    logits_sum = None
+    for angle in [0, 90, 180, 270]:
+        img    = image.rotate(angle) if angle > 0 else image
+        tensor = preprocess(img).unsqueeze(0)
+        with torch.no_grad():
+            emb    = model.encode_image(tensor).squeeze(0)
+            logits = head(emb.unsqueeze(0)).squeeze(0)
+        logits_sum = logits if logits_sum is None else logits_sum + logits
+
+    probs = F.softmax(logits_sum, dim=0)
+
+    results = []
+    for label_idx, prob in enumerate(probs):
+        family_base = label_to_family[label_idx]
+        if remaining_families is not None and family_base not in remaining_families:
+            continue
+        results.append((prob.item(), f"ID{family_base}"))
+
+    results.sort(reverse=True)
+    return results
+
+
 def _score_query_vs_embeddings(Q: torch.Tensor,
                                 emb_dict: dict[Path, torch.Tensor]) -> dict[str, float]:
     """Score 4-rotation query Q (4, D) against an embedding dict.

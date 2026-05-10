@@ -7,7 +7,7 @@ export function useGameState(playSound = null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
-  const [previousGameState, setPreviousGameState] = useState(null);
+  const previousGameStateRef = useRef(null);
 
   const pollingRef = useRef(null);
 
@@ -16,9 +16,9 @@ export function useGameState(playSound = null) {
       const data = await getGameState();
       const historyData = await getHistory();
 
-      if (playSound && previousGameState && data) {
+      if (playSound && previousGameStateRef.current && data) {
         // check if turn has changed
-        if (previousGameState.current_player !== data.current_player) {
+        if (previousGameStateRef.current.current_player !== data.current_player) {
           playSound('placeMeeple');
         }
       }
@@ -26,14 +26,14 @@ export function useGameState(playSound = null) {
       setGameState(data);
       setHistory(historyData);
       setError(null);
-      setPreviousGameState(data);
+      previousGameStateRef.current = data;
     } catch (err) {
       setError(err.message);
       setGameState(null);
     } finally {
       setLoading(false);
     }
-  }, [playSound, previousGameState]);
+  }, [playSound]);
 
 
   const immediateFetch = useCallback(async () => {

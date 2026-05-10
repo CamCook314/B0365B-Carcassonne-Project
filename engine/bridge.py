@@ -49,6 +49,10 @@ def _update_remaining_families():
 
 
 LIVE_ID_CROPS_DIR = ROOT / "cv" / "live_id_crops"
+GAME_REFS_DIR     = ROOT / "cv" / "game_refs"
+
+_last_placed_id: str | None = None
+
 
 def _save_id_crop_as_game_ref(confirmed_id: str):
     """Copy the last identification crop to cv/live_id_crops/<confirmed_id>.jpg.
@@ -65,6 +69,24 @@ def _save_id_crop_as_game_ref(confirmed_id: str):
     dst = LIVE_ID_CROPS_DIR / f"{confirmed_id}.jpg"
     shutil.copy2(src, dst)
     print(f"[bridge] Saved id crop → live_id_crops/{confirmed_id}.jpg")
+
+
+def _save_placed_crop_as_game_ref(confirmed_id: str | None):
+    """Copy the placed-slot crop to cv/game_refs/<confirmed_id>.jpg for rotation training.
+
+    Unlike live_id_crops, placed-slot crops go through crop_placed_slot() with the
+    same board_angle deskew used during rotation inference, so rotation labels are
+    verified and safe for train_rotation.py.
+    """
+    if confirmed_id is None:
+        return
+    src = Project_CV.last_placed_crop_path
+    if not src or not Path(src).exists():
+        return
+    GAME_REFS_DIR.mkdir(exist_ok=True)
+    dst = GAME_REFS_DIR / f"{confirmed_id}.jpg"
+    shutil.copy2(src, dst)
+    print(f"[bridge] Saved placed crop → game_refs/{confirmed_id}.jpg")
 
 
 def _post(path: str, body: dict) -> dict | None:
@@ -99,6 +121,7 @@ def _handle_tile_checked():
 
 
 def _handle_cv_to_engine():
+    global _last_placed_id
     tile_id    = Project_CV.tile_id
     grid_coord = Project_CV.grid_coord
     gx, gy     = grid_coord
@@ -108,6 +131,7 @@ def _handle_cv_to_engine():
 
     if resp and resp.get("status") == "ok":
         confirmed_id = resp.get("placed")
+        _last_placed_id = confirmed_id
         print(f"[bridge] /place OK - placed {confirmed_id} at {resp.get('position')}")
         Project_CV.game_response = (True, 1)
         _update_remaining_families()
@@ -147,6 +171,7 @@ def _handle_meeple_placed():
             print(f"[bridge] /meeple/skip fallback OK - turn={skip_resp.get('turn')}")
         else:
             print(f"[bridge] /meeple/skip fallback error: {skip_resp}")
+    _save_placed_crop_as_game_ref(_last_placed_id)
     Project_CV.meeple_placed        = False
     Project_CV.meeple_colour        = None
     Project_CV.meeple_direction     = None
@@ -160,6 +185,7 @@ def _handle_meeple_skip():
         print(f"[bridge] /meeple/skip OK - turn={resp.get('turn')}  player={resp.get('current_player')}")
     else:
         print(f"[bridge] /meeple/skip error: {resp}")
+    _save_placed_crop_as_game_ref(_last_placed_id)
     Project_CV.meeple_skip          = False
     Project_CV.valid_meeple_sides   = None
 
@@ -250,6 +276,7 @@ def main():
                     # Website button pressed: pending_placement cleared without CV flags being set
                     if tile_just_placed and engine_api.pending_placement is None:
                         print("[bridge] Meeple/skip handled via website — unblocking CV.")
+                        _save_placed_crop_as_game_ref(_last_placed_id)
                         Project_CV.meeple_placed        = False   # clear in case safety also fired
                         Project_CV.meeple_skip          = False
                         Project_CV.meeple_handled       = True

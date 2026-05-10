@@ -11,6 +11,7 @@ import ctypes
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cv import image_match
+from cv.rotation_classifier import load_rotation_model, match_rotation_resnet
 from cv.blob_pipeline import process_frame, mask_centroid, find_contours, classify_contours
 from cv.grid_tracker import GridTracker
 from cv.meeple_detector import detect_meeple, CROP_HALF_FRAC
@@ -38,6 +39,7 @@ expected_meeple_colour = None    # Bridge sets to current player colour at start
 remaining_families     = None    # Bridge updates after each placement; set of family base IDs still in bag
 valid_meeple_sides     = None    # Bridge sets after placement: list of valid sides for the tile
 last_id_crop_path      = None    # Path to the most recently saved identification crop (set by CV, read by bridge)
+last_placed_crop_path  = None    # Path to the most recently saved placed-slot crop (set during WAIT_MEEPLE, read by bridge)
 
 
 _SIDE_VECTORS = {
@@ -173,6 +175,12 @@ def cv_main_loop():
     game_embeddings    = image_match.load_game_embeddings()
     bias               = image_match.load_bias()
 
+    try:
+        rot_model = load_rotation_model()
+    except FileNotFoundError:
+        print("[CV] rotation_model.pth not found — falling back to embedding-based rotation")
+        rot_model = None
+
     # Minimum per-rotation cosine similarity for match_rotation to be trusted.
     # Below this the system falls back to reporting the family ID only.
     ROT_CONF_THRESHOLD = 0.70
@@ -302,7 +310,7 @@ def cv_main_loop():
     # the growth counter, so one flickering frame doesn't undo 2+ growth frames.
     non_growth_count = 0
 
-    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, valid_meeple_sides, last_id_crop_path
+    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, valid_meeple_sides, last_id_crop_path, last_placed_crop_path
 
     print("Place the first tile on the board — it will be detected automatically. Press 'b' to force-confirm.")
 
@@ -466,10 +474,15 @@ def cv_main_loop():
                                 proc_scale, board_angle_deg=board_angle)
                             placed_path = os.path.join(CROPS_DIR, f"placed_{save_count - 1:04d}.png")
                             cv.imwrite(placed_path, placed_crop)
+                            last_placed_crop_path = placed_path
                             print(f"Rotation detection for origin tile (family {family_id}):")
-                            tile_id, rot_conf = image_match.match_rotation(
-                                placed_path, model, preprocess, embeddings, family_id,
-                                bias=bias, game_embeddings=game_embeddings)
+                            if rot_model is not None:
+                                tile_id, rot_conf = match_rotation_resnet(
+                                    placed_path, family_id, rot_model)
+                            else:
+                                tile_id, rot_conf = image_match.match_rotation(
+                                    placed_path, model, preprocess, embeddings, family_id,
+                                    bias=bias, game_embeddings=game_embeddings)
                             if rot_conf < ROT_CONF_THRESHOLD:
                                 print(f"  Low rotation confidence ({rot_conf:.4f}) — using family ID")
                                 tile_id = family_id
@@ -771,10 +784,15 @@ def cv_main_loop():
                                 center_px=pending_validated_center)
                             placed_path = os.path.join(CROPS_DIR, f"placed_{save_count - 1:04d}.png")
                             cv.imwrite(placed_path, placed_crop)
+                            last_placed_crop_path = placed_path
                             print(f"Rotation detection for family {pending_family_id} (arm cleared):")
-                            tile_id, rot_conf = image_match.match_rotation(
-                                placed_path, model, preprocess, embeddings,
-                                pending_family_id, bias=bias, game_embeddings=game_embeddings)
+                            if rot_model is not None:
+                                tile_id, rot_conf = match_rotation_resnet(
+                                    placed_path, pending_family_id, rot_model)
+                            else:
+                                tile_id, rot_conf = image_match.match_rotation(
+                                    placed_path, model, preprocess, embeddings,
+                                    pending_family_id, bias=bias, game_embeddings=game_embeddings)
                             if rot_conf < ROT_CONF_THRESHOLD:
                                 print(f"  Low rotation confidence ({rot_conf:.4f}) — using family ID")
                                 tile_id = pending_family_id
