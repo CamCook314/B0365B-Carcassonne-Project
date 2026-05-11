@@ -276,7 +276,7 @@ def projector_main():
     # Get screens info, projector in extend mode is classed as extra screen
     monitors = screeninfo.get_monitors()
     # Check to make sure monitor is connected
-    while len(monitors) > 1:
+    while len(monitors) == 1:
         time.sleep(1)
 
     # Get project screen settings
