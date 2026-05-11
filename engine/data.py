@@ -95,6 +95,8 @@ class gameStateClass:
 		self.current_turn = 1
 		self.structures = []
 		self.river_struct = [] # will contain coordinates for river tiles for various uses
+		self.tile_dict_turn = {} #tracks tiles placed in last 3 turns
+
 
 		# The below are event states. Read by api.build_active_events() to populate the
 		# Active Events panel on the website. Add new event flags here.
@@ -156,7 +158,25 @@ class gameStateClass:
 					self.event_pool.append(Event((randx, randy)))
 					print(Event((randx, randy)))
 					break
+	
+	#for 3 turns after its placed, every turn the tile has a 5% chance to either turn good or bad, effects are permanent
+	def good_tile_bad_tile(self, tile): #runs every turn
+		self.tile_dict_turn[tile] = 0
 
+		overstayed = []
+		for til in self.tile_dict_turn:
+			roll = random.random()
+			if roll < 0.05: # 5% chance
+				til.bad_tile = True
+			elif roll > 0.95:
+				til.good_tile = True
+
+			self.tile_dict_turn[til] += 1
+			if self.tile_dict_turn[til] >= 3:
+				overstayed.append(til)
+
+		for til in overstayed:
+			del self.tile_dict_turn[til]
 
 	# expands the board when a tile placement would fall outside the current
 	# array bounds. works on array indexes after converting from x,y coordinates.
@@ -215,6 +235,8 @@ class gameStateClass:
 		for event in self.event_pool:
 			if event.coords == (x, y):
 				event.play(self)
+
+		self.good_tile_bad_tile(tile)
 		
 
 
@@ -641,18 +663,24 @@ class structures:
 
 		temp_score = 0
 		for tile, row, col in self.tiles_used:
+			modifier = 1
+			if tile.good_tile == True:
+				modifier = 2
+			elif tile.bad_tile == True:
+				modifier = 0.5
+
 			if self.type == 1:
-				temp_score += 1
+				temp_score += 1 * modifier
 				continue
 			elif self.type == 2:
 				if tile.attribute == 1 and unrest == True:
-					temp_score += 2
+					temp_score += 2 * modifier
 				else:
 					temp_score += 1
 				if tile.attribute == 1 and unrest == False:
-					temp_score += 4
+					temp_score += 4 * modifier
 				else:
-					temp_score += 2
+					temp_score += 2 * modifier
 
 		for player in self.players:
 			player.score += temp_score

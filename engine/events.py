@@ -63,6 +63,5 @@ class Event:
         if game.turnNum >= self.start_turn + 4:
             game.unrestCheck = False
 
-
     def __repr__(self):
         return f"Event {self.name} placed at {self.coords}"
