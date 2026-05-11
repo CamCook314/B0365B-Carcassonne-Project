@@ -280,7 +280,7 @@ def projector_main():
         time.sleep(1)
 
     # Get project screen settings
-    projector = monitors[0]
+    projector = monitors[1]
     # Define projector resolution
     proj_w, proj_h = projector.width, projector.height
 
