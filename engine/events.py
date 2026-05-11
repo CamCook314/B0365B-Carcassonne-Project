@@ -20,7 +20,7 @@ class Event:
         self.turn = 0
 
     def choose_random_event(self):
-        return random.choice(["extra turn", "volcano", "unrest"])
+        return random.choice(["extra turn", "volcano", "unrest"]) #random event pool
 
     def play(self, game):
         if self.name == "extra turn":
@@ -44,7 +44,7 @@ class Event:
 					(self.coords[0] - 1, self.coords[1] - 1), (self.coords[0] - 1, self.coords[1]), (self.coords[0]- 1, self.coords[1] + 1),
 					(self.coords[0],   self.coords[1] - 1), (self.coords[0],   self.coords[1]), (self.coords[0],   self.coords[1] + 1),
 					(self.coords[0] + 1, self.coords[1] - 1), (self.coords[0] + 1, self.coords[1]), (self.coords[0] + 1, self.coords[1] + 1)]
-        if game.turnNum >= self.start_turn + 8:
+        if game.turnNum >= self.start_turn + 8: #change this for more or less turns
             for nr, nc in all_neighbors:
                 if game.board[nr][nc] is None:
                     for i in game.structures: #destroy if finds empty neighbour
@@ -60,7 +60,7 @@ class Event:
         game.unrest_check = True
     
     def check_unrest(self, game):
-        if game.turnNum >= self.start_turn + 4:
+        if game.turnNum >= self.start_turn + 4: # change this to chance turns
             game.unrestCheck = False
 
     def __repr__(self):

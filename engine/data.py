@@ -172,7 +172,7 @@ class gameStateClass:
 				til.good_tile = True
 
 			self.tile_dict_turn[til] += 1
-			if self.tile_dict_turn[til] >= 3:
+			if self.tile_dict_turn[til] >= 3: #only 3 turns to change
 				overstayed.append(til)
 
 		for til in overstayed:
@@ -277,38 +277,33 @@ class gameStateClass:
 				edgegroup = [matching_edges]
 			else:
 				edgegroup = [[d] for d in matching_edges]
-				#print(edgegroup)
-			for group in edgegroup:
-				#print(group)
+			for group in edgegroup: #only 1 if feature continues, multiple if seperated
 				matching_structures = []
 				for structure in self.structures:
 					if structure.type != type:
 						continue
 					connections = structure.check_structure_compatability(new_row, new_col, tile, self.board)
 					group_connections = [c for c in connections if c in group]
-					#print(group_connections)
 					if group_connections:
 						matching_structures.append((structure, group_connections))
-				if len(matching_structures) == 0:
-					if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1):
+				if len(matching_structures) == 0: # no structure found, create new one
+					if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1): # for roads
 						temp_struct = structures(tile, new_row, new_col, 1)
 						if tile.feature_continues == 0:
 							temp_struct.edges = []
 							temp_struct.edges.append((tile, group[0]))
 						
-						#print(temp_struct.edges)
 						self.structures.append(temp_struct)
-					elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2):
+					elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2): #for cities
 						temp_struct = structures(tile, new_row, new_col, 2)
 						if tile.feature_continues == 0:
 							temp_struct.edges = []
 							temp_struct.edges.append((tile, group[0]))
 						self.structures.append(temp_struct)
-				elif len(matching_structures) == 1:
+				elif len(matching_structures) == 1: # 1 matching structure, need to extend
 					struct, _ = matching_structures[0]
 					struct.extend_structure(new_row, new_col, tile, self.board, group)
-				elif len(matching_structures) >= 2:
-					#print(len(matching_structures))
+				elif len(matching_structures) >= 2: #2 or more matches, so need to merge into 1 structure
 					all_tiles = []
 					all_edges = []
 					all_players = []
@@ -329,7 +324,7 @@ class gameStateClass:
 			#Monastary detected
 			temp_struct = structures(tile, new_row, new_col, 3)
 			self.structures.append(temp_struct)
-		for structure in self.structures:
+		for structure in self.structures: # score all completed structures
 			if structure.check_completed(self.board):
 				structure.score_structure(self.unrestCheck, self)
 				self.structures.remove(structure)
@@ -340,7 +335,7 @@ class gameStateClass:
 		if self.extra_turn:
 			self.extra_turn = False
 			return
-		for ev in self.event_pool:
+		for ev in self.event_pool: #check events every turn
 			if ev.name == "volcano" and ev.active == True:
 				ev.volcano_check(self)
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
@@ -470,7 +465,7 @@ class gameStateClass:
 					board_xy[(x, y)] = self.board[array_row][array_col]
 		return board_xy
 
-	def score_end_game(self):
+	def score_end_game(self): # score all structures at end, these will be all uncompleted structures, so half points
 		for struct in self.structures:
 			temp_score = 0
 			if struct.type == 1:
@@ -663,11 +658,13 @@ class structures:
 
 		temp_score = 0
 		for tile, row, col in self.tiles_used:
-			modifier = 1
+			modifier = 1 # for good or bad tiles
 			if tile.good_tile == True:
 				modifier = 2
+				print("tile went good")
 			elif tile.bad_tile == True:
 				modifier = 0.5
+				print("tile went bad")
 
 			if self.type == 1:
 				temp_score += 1 * modifier
