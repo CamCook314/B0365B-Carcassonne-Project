@@ -126,14 +126,39 @@ def load_classifier() -> dict | None:
     return {"head": head, "label_to_family": ckpt["label_to_family"]}
 
 
-def match_image_classifier(path: str, model, preprocess, classifier: dict,
-                            remaining_families: set | None = None) -> list[tuple[float, str]]:
-    """Classify a tile image using the trained head.
+_dino_backbone   = None
+_dino_preprocess = None
 
-    Averages logits over all 4 rotations so the prediction is rotation-invariant.
-    Returns the same [(score, tile_id), ...] format as match_image, ranked by confidence.
-    tile_id is the family base ID (e.g. 'ID0', 'ID4') — match_rotation resolves the exact rotation.
+def _get_dino_backbone():
+    """Lazy-load DINOv2-base backbone for classifier inference (cached after first call)."""
+    global _dino_backbone, _dino_preprocess
+    if _dino_backbone is None:
+        from transformers import AutoModel
+        from torchvision import transforms as T
+        print("[image_match] Loading DINOv2-base backbone for classifier inference...")
+        _dino_backbone = AutoModel.from_pretrained("facebook/dinov2-base")
+        _dino_backbone.eval()
+        for p in _dino_backbone.parameters():
+            p.requires_grad = False
+        _dino_preprocess = T.Compose([
+            T.Resize(256, interpolation=T.InterpolationMode.BICUBIC),
+            T.CenterCrop(224),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+        print("[image_match] DINOv2 backbone ready.")
+    return _dino_backbone, _dino_preprocess
+
+
+def match_image_classifier(path: str, classifier: dict,
+                            remaining_families: set | None = None) -> list[tuple[float, str]]:
+    """Classify a tile image using the trained DINOv2+MLP head.
+
+    Averages logits over all 4 rotations (rotation-invariant family ID).
+    Returns [(prob, tile_id), ...] in the same format as match_image.
+    tile_id is the family base ID e.g. 'ID0', 'ID4'.
     """
+    backbone, dino_pre = _get_dino_backbone()
     head            = classifier["head"]
     label_to_family = classifier["label_to_family"]
 
@@ -141,10 +166,10 @@ def match_image_classifier(path: str, model, preprocess, classifier: dict,
     logits_sum = None
     for angle in [0, 90, 180, 270]:
         img    = image.rotate(angle) if angle > 0 else image
-        tensor = preprocess(img).unsqueeze(0)
+        tensor = dino_pre(img).unsqueeze(0)
         with torch.no_grad():
-            emb    = model.encode_image(tensor).squeeze(0)
-            logits = head(emb.unsqueeze(0)).squeeze(0)
+            feats  = backbone(pixel_values=tensor).last_hidden_state[:, 0, :]
+            logits = head(feats).squeeze(0)
         logits_sum = logits if logits_sum is None else logits_sum + logits
 
     probs = F.softmax(logits_sum, dim=0)

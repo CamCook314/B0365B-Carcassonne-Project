@@ -224,10 +224,15 @@ def start_game():
         "merchant": merchant,
         "necrobinder": necrobinder
     }
+    default_classes = ["lord", "knight", "merchant", "farmer", "necrobinder"]
 
+    if isinstance(num_players_data, int):
+        if num_players_data < 2 or num_players_data > 5:
+            return jsonify({"error": "Player count must be between 2 and 5"}), 400
+        num_players_data = default_classes[:num_players_data]
 
     if not isinstance(num_players_data, list) or len(num_players_data) < 2 or len(num_players_data) > 5:
-        return jsonify({"error": "Players must be between 2 and 5 or a list"}), 400
+        return jsonify({"error": "Players must be a count (2-5) or a list of class names"}), 400
 
     players = []
     for name in num_players_data:

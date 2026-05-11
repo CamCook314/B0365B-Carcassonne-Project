@@ -174,6 +174,11 @@ def cv_main_loop():
     embeddings         = image_match.load_embeddings()
     game_embeddings    = image_match.load_game_embeddings()
     bias               = image_match.load_bias()
+    classifier         = image_match.load_classifier()
+    if classifier:
+        print("[CV] DINOv2 MLP classifier loaded — using for family identification")
+    else:
+        print("[CV] No classifier_head.pt found — falling back to CLIP embedding matching")
 
     try:
         rot_model = load_rotation_model()
@@ -390,9 +395,13 @@ def cv_main_loop():
                 print(f"Saved origin tile: {path}")
                 save_count += 1
 
-                results         = image_match.match_image(path, model, preprocess, embeddings,
-                                                          bias=bias, game_embeddings=game_embeddings,
-                                                          remaining_families=remaining_families)
+                if classifier is not None:
+                    results = image_match.match_image_classifier(path, classifier,
+                                                                  remaining_families=remaining_families)
+                else:
+                    results = image_match.match_image(path, model, preprocess, embeddings,
+                                                      bias=bias, game_embeddings=game_embeddings,
+                                                      remaining_families=remaining_families)
                 tile_id         = results[0][1]
                 tile_candidates = [(s, rid) for s, rid in results]
                 tile_checked    = True
@@ -513,9 +522,13 @@ def cv_main_loop():
                             candidate_tile_center = None
                             phase                 = WAIT_PLACEMENT
                             placement_cooldown    = PLACEMENT_COOLDOWN_FRAMES
-                            results         = image_match.match_image(path, model, preprocess, embeddings,
-                                                                      bias=bias, game_embeddings=game_embeddings,
-                                                                      remaining_families=remaining_families)
+                            if classifier is not None:
+                                results = image_match.match_image_classifier(path, classifier,
+                                                                              remaining_families=remaining_families)
+                            else:
+                                results = image_match.match_image(path, model, preprocess, embeddings,
+                                                                  bias=bias, game_embeddings=game_embeddings,
+                                                                  remaining_families=remaining_families)
                             tile_id         = results[0][1]
                             tile_candidates = [(s, rid) for s, rid in results]
                             tile_checked    = True
