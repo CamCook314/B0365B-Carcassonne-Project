@@ -54,8 +54,8 @@ def run():
         num = int(num)
     except ValueError:
         num = 3
-
-    ok, data = api_post("/start", json={"players": num})
+    players = ['farmer', 'knight', 'merchant', 'lord', 'necrobinder']
+    ok, data = api_post("/start", json={"players": players[:num]})
     if not ok:
         print(f"Failed to start: {data}")
         return

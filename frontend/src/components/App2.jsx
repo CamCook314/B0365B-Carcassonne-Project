@@ -12,7 +12,7 @@ import Header from "./Header";
 
 export default function App2() {
   const { play } = useSoundEffect();
-  const { gameState, loading, error, retry: fetchState, immediateFetch, history } = useGameState(play);
+  const { gameState, loading, error, setError, retry: fetchState, immediateFetch, history } = useGameState(play);
   
 
   // start a new game

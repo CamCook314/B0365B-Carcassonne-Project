@@ -439,28 +439,50 @@ def rotate_tile():
         y: int
     }
     """
-    global game_state, pending_placement
+    global game_state
 
     if game_state is None:
         return jsonify({"error": "Game not started"}), 400
-    if pending_placement is None:
-        return jsonify({"error": "No pending placement"}), 400
 
     data = request.get_json()
     
     x, y = data.get("x"), data.get("y")
     if x is None or y is None:
         return jsonify({"error": "Missing x or y"}), 400
+
     # find the tile at (x, y)
-    tile = game_state.get_board_xy().get((x, y))
+    board = game_state.board
+    array_row, array_col = game_state.to_array_index(x, y) # convert to array indices
+    tile = board[array_row][array_col]
+
     if tile is None:
         return jsonify({"error": f"No tile found at ({x}, {y})"}), 400
+
     # rotate the tile
-    # TODO: how do you rotate the tile ???
+    current_tile = tile.tile_id
+    # extract number
+    base_num = int(current_tile.replace("ID", ""))
+    # rotate by adding 1 to the base_num
+    family_base = (base_num // 4) * 4
+    current_rotation = base_num % 4
+    new_base_num = family_base + ((current_rotation + 1) % 4)
+
+    new_tile_id = f"ID{new_base_num}"
+    new_tile_obj = tile_set[new_tile_id]
+
+    # update the tile on the board
+    board[array_row][array_col] = new_tile_obj
+    projector.clear_proj_valid() # Clear projector valid tiles
+    print(f"Rotated tile at ({x},{y}) from {current_tile} to {new_tile_id}")
+    # Verify the update
+    verify_tile = board[array_row][array_col]
+    print(f"Verification: Board now has {verify_tile.tile_id} at ({x},{y})")
     
     return jsonify({
         "status": "ok",
         "position": [x, y],
+        "old_tile_id": current_tile,
+        "new_tile_id": new_tile_id
     }), 200
 
 
