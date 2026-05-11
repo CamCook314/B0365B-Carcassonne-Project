@@ -38,7 +38,13 @@ class _RandomDegrade:
         return img.resize((size, size), Image.BILINEAR).resize((w, h), Image.BILINEAR)
 
 
+def _rand_canonical_rotation(img):
+    """Rotate by a random multiple of 90° to match the 4-rotation inference averaging."""
+    return img.rotate(random.choice([0, 90, 180, 270]))
+
+
 AUGMENT_TRAIN = T.Compose([
+    T.Lambda(_rand_canonical_rotation),
     T.RandomRotation(degrees=10),
     T.ColorJitter(brightness=0.40, contrast=0.40, saturation=0.15),
     T.RandomHorizontalFlip(),
@@ -78,7 +84,7 @@ def _build_split(image_dir, augments_per_image, extra_dirs=None):
     Val:   last studio reference per family, no augmentation.
     Train: all other studio refs + all live crops, with AUGMENT_TRAIN.
     """
-    studio_dir   = Path(image_dir)
+    studio_dir   = Path(image_dir).resolve()
     studio_paths = sorted(studio_dir.rglob("*.jpg"))
     if not studio_paths:
         raise FileNotFoundError(f"No .jpg files in {image_dir}")
@@ -105,7 +111,7 @@ def _build_split(image_dir, augments_per_image, extra_dirs=None):
             train_labels.extend([label] * augments_per_image)
 
     # Live crops go to train only — never val
-    live_dir  = Path(__file__).parent / "live_id_crops"
+    live_dir  = (Path(__file__).parent / "live_id_crops").resolve()
     live_dirs = [live_dir] if live_dir.exists() else []
     for d in (extra_dirs or []):
         d = Path(d)
@@ -158,7 +164,7 @@ def _build_mlp(num_classes: int) -> nn.Sequential:
     return nn.Sequential(
         nn.Linear(768, 256),
         nn.GELU(),
-        nn.Dropout(0.3),
+        nn.Dropout(0.5),
         nn.Linear(256, num_classes),
     )
 
@@ -182,9 +188,10 @@ def train(image_dir, out_path, epochs, augments, refresh):
     val_feats   = val_feats.to(device)
     val_labels  = val_labels.to(device)
 
-    head    = _build_mlp(num_classes).to(device)
-    opt     = torch.optim.AdamW(head.parameters(), lr=1e-3, weight_decay=1e-4)
-    loss_fn = nn.CrossEntropyLoss()
+    head      = _build_mlp(num_classes).to(device)
+    opt       = torch.optim.AdamW(head.parameters(), lr=1e-3, weight_decay=1e-3)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs, eta_min=1e-5)
+    loss_fn   = nn.CrossEntropyLoss(label_smoothing=0.05)
 
     best_val_acc = -1.0
     best_state   = None
@@ -212,6 +219,8 @@ def train(image_dir, out_path, epochs, augments, refresh):
             total_loss += loss.item() * len(lbl)
             correct    += (logits.argmax(1) == lbl).sum().item()
             total      += len(lbl)
+
+        scheduler.step()
 
         head.eval()
         with torch.no_grad():
@@ -248,8 +257,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dir",      default="assets/tile_photos/edit")
     parser.add_argument("--out",      default="cv/classifier_head.pt")
-    parser.add_argument("--epochs",   type=int, default=50)
-    parser.add_argument("--augments", type=int, default=70)
+    parser.add_argument("--epochs",   type=int, default=30)
+    parser.add_argument("--augments", type=int, default=30)
     parser.add_argument("--refresh",  type=int, default=5,
                         help="Re-extract train features every N epochs (default 5)")
     args = parser.parse_args()

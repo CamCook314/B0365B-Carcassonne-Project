@@ -95,6 +95,8 @@ class gameStateClass:
 		self.current_turn = 1
 		self.structures = []
 		self.river_struct = [] # will contain coordinates for river tiles for various uses
+		self.tile_dict_turn = {} #tracks tiles placed in last 3 turns
+
 
 		# The below are event states. Read by api.build_active_events() to populate the
 		# Active Events panel on the website. Add new event flags here.
@@ -156,7 +158,25 @@ class gameStateClass:
 					self.event_pool.append(Event((randx, randy)))
 					print(Event((randx, randy)))
 					break
+	
+	#for 3 turns after its placed, every turn the tile has a 5% chance to either turn good or bad, effects are permanent
+	def good_tile_bad_tile(self, tile): #runs every turn
+		self.tile_dict_turn[tile] = 0
 
+		overstayed = []
+		for til in self.tile_dict_turn:
+			roll = random.random()
+			if roll < 0.05: # 5% chance
+				til.bad_tile = True
+			elif roll > 0.95:
+				til.good_tile = True
+
+			self.tile_dict_turn[til] += 1
+			if self.tile_dict_turn[til] >= 3: #only 3 turns to change
+				overstayed.append(til)
+
+		for til in overstayed:
+			del self.tile_dict_turn[til]
 
 	# expands the board when a tile placement would fall outside the current
 	# array bounds. works on array indexes after converting from x,y coordinates.
@@ -215,6 +235,8 @@ class gameStateClass:
 		for event in self.event_pool:
 			if event.coords == (x, y):
 				event.play(self)
+
+		self.good_tile_bad_tile(tile)
 		
 
 
@@ -255,38 +277,33 @@ class gameStateClass:
 				edgegroup = [matching_edges]
 			else:
 				edgegroup = [[d] for d in matching_edges]
-				#print(edgegroup)
-			for group in edgegroup:
-				#print(group)
+			for group in edgegroup: #only 1 if feature continues, multiple if seperated
 				matching_structures = []
 				for structure in self.structures:
 					if structure.type != type:
 						continue
 					connections = structure.check_structure_compatability(new_row, new_col, tile, self.board)
 					group_connections = [c for c in connections if c in group]
-					#print(group_connections)
 					if group_connections:
 						matching_structures.append((structure, group_connections))
-				if len(matching_structures) == 0:
-					if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1):
+				if len(matching_structures) == 0: # no structure found, create new one
+					if type == 1 and (tile.up == 1 or tile.right == 1 or tile.down == 1 or tile.left == 1): # for roads
 						temp_struct = structures(tile, new_row, new_col, 1)
 						if tile.feature_continues == 0:
 							temp_struct.edges = []
 							temp_struct.edges.append((tile, group[0]))
 						
-						#print(temp_struct.edges)
 						self.structures.append(temp_struct)
-					elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2):
+					elif type == 2 and (tile.up == 2 or tile.right == 2 or tile.down == 2 or tile.left == 2): #for cities
 						temp_struct = structures(tile, new_row, new_col, 2)
 						if tile.feature_continues == 0:
 							temp_struct.edges = []
 							temp_struct.edges.append((tile, group[0]))
 						self.structures.append(temp_struct)
-				elif len(matching_structures) == 1:
+				elif len(matching_structures) == 1: # 1 matching structure, need to extend
 					struct, _ = matching_structures[0]
 					struct.extend_structure(new_row, new_col, tile, self.board, group)
-				elif len(matching_structures) >= 2:
-					#print(len(matching_structures))
+				elif len(matching_structures) >= 2: #2 or more matches, so need to merge into 1 structure
 					all_tiles = []
 					all_edges = []
 					all_players = []
@@ -307,7 +324,7 @@ class gameStateClass:
 			#Monastary detected
 			temp_struct = structures(tile, new_row, new_col, 3)
 			self.structures.append(temp_struct)
-		for structure in self.structures:
+		for structure in self.structures: # score all completed structures
 			if structure.check_completed(self.board):
 				structure.score_structure(self.unrestCheck, self)
 				self.structures.remove(structure)
@@ -318,7 +335,7 @@ class gameStateClass:
 		if self.extra_turn:
 			self.extra_turn = False
 			return
-		for ev in self.event_pool:
+		for ev in self.event_pool: #check events every turn
 			if ev.name == "volcano" and ev.active == True:
 				ev.volcano_check(self)
 		self.currentIndex = (self.currentIndex + 1) % len(self.players)
@@ -448,7 +465,7 @@ class gameStateClass:
 					board_xy[(x, y)] = self.board[array_row][array_col]
 		return board_xy
 
-	def score_end_game(self):
+	def score_end_game(self): # score all structures at end, these will be all uncompleted structures, so half points
 		for struct in self.structures:
 			temp_score = 0
 			if struct.type == 1:
@@ -641,18 +658,26 @@ class structures:
 
 		temp_score = 0
 		for tile, row, col in self.tiles_used:
+			modifier = 1 # for good or bad tiles
+			if tile.good_tile == True:
+				modifier = 2
+				print("tile went good")
+			elif tile.bad_tile == True:
+				modifier = 0.5
+				print("tile went bad")
+
 			if self.type == 1:
-				temp_score += 1
+				temp_score += 1 * modifier
 				continue
 			elif self.type == 2:
 				if tile.attribute == 1 and unrest == True:
-					temp_score += 2
+					temp_score += 2 * modifier
 				else:
 					temp_score += 1
 				if tile.attribute == 1 and unrest == False:
-					temp_score += 4
+					temp_score += 4 * modifier
 				else:
-					temp_score += 2
+					temp_score += 2 * modifier
 
 		for player in self.players:
 			player.score += temp_score
