@@ -32,11 +32,22 @@ export async function getGameState() {
 }
 
 export async function startGame(numPlayers) {
+  // set default classes so the game doesn't brick
+  const defaultPlayerClasses = {
+    2: ['farmer', 'knight'],
+    3: ['farmer', 'knight', 'merchant'],
+    4: ['farmer', 'knight', 'merchant', 'lord'],
+    5: ['farmer', 'knight', 'merchant', 'lord', 'necrobinder']
+  };
+
+  const players = defaultPlayerClasses[numPlayers] || defaultPlayerClasses[2]
+
   const res = await fetch(`${BASE_URL}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ players: numPlayers }),
+    body: JSON.stringify({ players: players }),
   });
+  
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error || "Failed to start game");
@@ -120,6 +131,20 @@ export async function setMeeple(row, col, side) {
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error || "Failed to set meeple");
+  }
+  const data = await res.json();
+  return data;
+}
+
+export async function rotateTile(row, col) {
+  const res = await fetch(`${BASE_URL}/rotate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ x: row, y: col }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to rotate tile");
   }
   const data = await res.json();
   return data;

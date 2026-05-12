@@ -2,10 +2,21 @@ import { overridePendingTile } from "../api/api.js";
 import { useGameState } from "../hooks/useGameState";
 import { useState } from "react";
 
+/**
+ * DetectedTile displays the tile currently detected by computer vision,
+ * along with its valid board placements and a list of candidate tiles
+ * the user can manually select as an override.
+ *
+ * @param {string|null} pendingTile - ID of the currently detected tile, or null if none detected.
+ * @param {Array<[number, number]>} validPlacements - Array of [x, y] coordinates where the tile can legally be placed.
+ * @param {string[]} pendingTileList - Ordered list of candidate tile IDs suggested by CV.
+ * @param {function} refresh - Callback to re-fetch game state after an override is applied.
+ */
 export default function DetectedTile({ pendingTile, validPlacements, pendingTileList, refresh }) {
   return <div className="card card-detect">
     <div className="card-header">
       <span>Detected Tile</span>
+      {/* Badge turns green and reads "DETECTED" when a tile is present */}
       <span
         className={`card-tag ${pendingTile ? "card-tag-green" : ""}`}
       >
@@ -20,10 +31,21 @@ export default function DetectedTile({ pendingTile, validPlacements, pendingTile
   </div>;
 }
 
+/**
+ * CardBody renders the main content area of the DetectedTile card.
+ * Shows the tile image and placement count when a tile is detected;
+ * otherwise shows a placeholder waiting state.
+ *
+ * @param {string|null} pendingTile - ID of the currently detected tile.
+ * @param {Array<[number, number]>} validPlacements - Legal [x, y] placements for the tile.
+ * @param {string[]} pendingTileList - Candidate tile IDs for manual override.
+ * @param {function} refresh - Callback to refresh state after an override.
+ */
 function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
     return <div className="card-body" style={{ textAlign: "center" }}>
         {pendingTile ? (
             <>
+                {/* Tile preview image — hides itself if the image asset is missing */}
                 <div className="tile-preview">
                     <img
                         src={`/tiles/${pendingTile}.jpg`}
@@ -38,9 +60,13 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
                             e.target.style.display = "none";
                         } } />
                 </div>
+
+                {/* Human-readable tile ID label */}
                 <div className="tile-name">
                     <p>{pendingTile}</p>
-                    </div>
+                </div>
+
+                {/* Deduplicated placement count — multiple rotations can share the same (x, y) */}
                 <div
                     style={{
                         fontSize: 11,
@@ -51,9 +77,12 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
                     {new Set(validPlacements.map(([x, y]) => `${x},${y}`)).size} valid placement
                     {new Set(validPlacements.map(([x, y]) => `${x},${y}`)).size !== 1 ? "s" : ""}
                 </div>
+
+                {/* Manual override controls and CV candidate list */}
                 <TileCandidates pendingTileList={pendingTileList} refresh={refresh} />
             </>
         ) : (
+            /* Waiting state shown when CV has not yet detected a tile */
             <>
                 <div className="tile-preview">—</div>
                 <div className="tile-name"><p>Waiting for CV...</p></div>
@@ -62,10 +91,25 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
     </div>; 
 }
 
+/**
+ * TileCandidates lets the user manually override the detected tile, either
+ * by typing a tile ID/number or clicking a thumbnail from the CV candidate list.
+ * Overrides are sent to the server immediately and trigger a state refresh.
+ *
+ * @param {string[]} pendingTileList - Ordered list of candidate tile IDs from CV.
+ * @param {function} refresh - Callback to refresh game state after an override.
+ */
 function TileCandidates({ pendingTileList, refresh }) {
+    // Controlled input value for the manual tile ID entry field
     const [manualInput, setManualInput] = useState("");
+    // Validation error message shown beneath the input when entry is invalid
     const [error, setError] = useState("");
 
+    /**
+     * Parses and submits a manually entered tile ID or numeric index.
+     * Accepts bare numbers (e.g. "42") or prefixed IDs (e.g. "ID42").
+     * Valid range is 0–335 inclusive.
+     */
     function submitManual() {
         const raw = manualInput.trim().toUpperCase().replace("ID", "");
         const num = parseInt(raw, 10);
@@ -81,6 +125,7 @@ function TileCandidates({ pendingTileList, refresh }) {
 
     return (
         <div style={{ marginTop: 16 }}>
+            {/* Manual override input row — also submits on Enter key */}
             <div style={{
                 display: "flex",
                 gap: 4,
@@ -114,7 +159,12 @@ function TileCandidates({ pendingTileList, refresh }) {
                     }}
                 >Override</button>
             </div>
+
+            {/* Inline validation error */}
             {error && <div style={{ fontSize: 11, color: "var(--red, #f88)", marginBottom: 6 }}>{error}</div>}
+
+            {/* Scrollable thumbnail grid of CV tile candidates.
+                Clicking any thumbnail immediately overrides the pending tile. */}
             <div style={{
                 maxHeight: 220,
                 overflowY: "auto",
@@ -141,8 +191,9 @@ function TileCandidates({ pendingTileList, refresh }) {
                             flexShrink: 0,
                         }}
                     >
+                        {/* Tile thumbnail — hidden silently if the asset doesn't exist */}
                         <img
-                            src={`/tiles/${tileId}.jpg`}
+                            src={`/tiles/ID${tileId*4}.jpg`}
                             alt={tileId}
                             style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 3 }}
                             onError={(e) => { e.target.style.display = "none"; }}

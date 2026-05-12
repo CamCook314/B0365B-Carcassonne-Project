@@ -2,7 +2,7 @@ import cv2 as cv
 import numpy as np
 import screeninfo
 import time
-from cv import Project_CV
+from . import Project_CV
 from collections import defaultdict
 import threading
 
