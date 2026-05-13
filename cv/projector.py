@@ -2,7 +2,7 @@ import cv2 as cv
 import numpy as np
 import screeninfo
 import time
-from cv import Project_CV
+from . import Project_CV
 from collections import defaultdict
 import threading
 
@@ -276,11 +276,11 @@ def projector_main():
     # Get screens info, projector in extend mode is classed as extra screen
     monitors = screeninfo.get_monitors()
     # Check to make sure monitor is connected
-    while len(monitors) > 1:
+    while len(monitors) == 1:
         time.sleep(1)
 
     # Get project screen settings
-    projector = monitors[0]
+    projector = monitors[1]
     # Define projector resolution
     proj_w, proj_h = projector.width, projector.height
 

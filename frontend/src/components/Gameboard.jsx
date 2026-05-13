@@ -1,11 +1,12 @@
 import { useState, useMemo } from "react";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
+import { rotateTile } from "../api/api";
 import "../css/Gameboard.css";
 
 const PLAYER_COLORS = ["#BF616A", "#81A1C1", "#A3BE8C", "#EBCB8B", "#B48EAD"];
 const CELL = 52; // tile size + gap
 
-export default function GameBoard({ tiles = [], meeples = [], validPlacements = [], onTileClick }) {
+export default function GameBoard({ tiles = [], meeples = [], validPlacements = [], onTileClick, refresh }) {
   const [selectedTile, setSelectedTile] = useState(null);
 
   // work out the board bounds and convert tile and ghost grid coords into pixel positions
@@ -51,6 +52,20 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
     console.log("meeples: ", meeples);
   };
 
+  const handleContextMenu = (tile, event) => { 
+    event.preventDefault(); // prevent default right-click menu
+    console.log("Right-clicked tile:", tile);
+    const rotateLog = rotateTile(tile.row, tile.col)
+      .then(updatedTile => {
+        console.log("Tile rotated:", updatedTile);
+      })
+      .catch(err => {
+        console.error("Failed to rotate tile:", err);
+        alert("Failed to rotate tile: " + err.message);
+      });
+      refresh();
+  }
+
   return (
     <div className="card card-board" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
       <div className="card-header">
@@ -79,6 +94,7 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
                     style={{ left: t.left, top: t.top }}
                     title={`${t.tileId} (${t.col}, ${t.row})`}
                     onClick={e => { e.stopPropagation(); handleClick(t); }}
+                    onContextMenu={e => handleContextMenu(t, e)}
                   >
                     {t.tileId ? (
                       <img src={`/tiles/${t.tileId}.jpg`} alt={t.tileId} draggable={false}

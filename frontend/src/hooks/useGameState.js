@@ -50,6 +50,6 @@ export function useGameState(playSound = null) {
 
 
 
-  return { gameState, loading, error, retry: fetchState, immediateFetch, history };
+  return { gameState, loading, error, setError, retry: fetchState, immediateFetch, history };
 }
 
