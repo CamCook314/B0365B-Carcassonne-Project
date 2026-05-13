@@ -6,10 +6,12 @@ export default function Header({ currentTurn, boardTiles, remaining }) {
       </h1>
     </div>
     <div className="header-right">
+      {/* Cur Turn Display */}
       <div>
         <div style={{ color: "var(--green)", fontWeight: 600 }}>{currentTurn}</div>
         <div className="header-stat-label">Turn</div>
       </div>
+      {/* Tiles Placed */}
       <div>
         <div style={{ color: "var(--green)", fontWeight: 600 }}>
           {boardTiles.length}/{boardTiles.length + remaining}

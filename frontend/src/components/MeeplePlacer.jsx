@@ -1,7 +1,7 @@
 import { placeMeeple, skipMeeple } from "../api/api.js";
 import { PLAYER_COLOURS } from "../constants/config";
 
-// Pretty labels for each side
+// labels for each side
 const SIDE_LABEL = {
   up:     "↑ Up",
   down:   "↓ Down",
@@ -11,7 +11,7 @@ const SIDE_LABEL = {
 };
 
 export default function MeeplePlacer({ pendingPlacement, currentPlayer, players }) {
-  // Idle state ther is no tile awaiting a meeple decision
+  // Idle state there is no tile awaiting a meeple decision
   if (!pendingPlacement) {
     return (
       <div className="card card-meeple">
@@ -56,9 +56,13 @@ export default function MeeplePlacer({ pendingPlacement, currentPlayer, players 
         <span className="card-tag card-tag-green">PLACE</span>
       </div>
       <div className="card-body">
+
+        {/* Outlines where Tile Placed */}
         <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 6 }}>
           Tile placed: <strong style={{ color: "var(--text)" }}>{tile_id}</strong> at ({x}, {y})
         </div>
+
+        {/* Current player turn and how many meeples left for them */}
         <div style={{ fontSize: 12, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
           <span
             style={{
@@ -78,6 +82,7 @@ export default function MeeplePlacer({ pendingPlacement, currentPlayer, players 
           </span>
         </div>
 
+        {/* show a message if no meeple spots exist otherwise render bttons for valid side */}
         {valid_sides.length === 0 ? (
           <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 10 }}>
             No road, city or monastery on this tile — only Skip is available.
@@ -124,6 +129,7 @@ export default function MeeplePlacer({ pendingPlacement, currentPlayer, players 
           Skip (no meeple)
         </button>
 
+        {/* No meeple left fallback */}
         {meeplesLeft <= 0 && (
           <div style={{ fontSize: 11, color: "var(--red, #BF616A)", marginTop: 8 }}>
             No meeples remaining — you must skip.

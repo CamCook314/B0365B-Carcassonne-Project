@@ -1,7 +1,7 @@
 """
 rotation_classifier.py, fast ResNet-18 rotation inference.
 
-Drop-in replacement for the CLIP-based match_rotation() in image_match.py.
+Replacement for the CLIP-based match_rotation() in image_match.py.
 Call load_rotation_model() once at startup, then use predict_rotation() anywhere
 you previously called match_rotation().
 
@@ -19,9 +19,8 @@ IMG_SIZE = 224
 
 # inference pipeline, matches the val transforms used during training
 _INFERENCE_TRANSFORM = transforms.Compose([
-    # resize so the tile fills the input window
+    # resize so the tile fills the input window and crop for the size
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
-    # centre crop to lock in the final 224x224 input size
     transforms.CenterCrop(IMG_SIZE),
     # convert PIL image to a tensor for the model
     transforms.ToTensor(),
@@ -36,12 +35,12 @@ def load_rotation_model(model_path: str | Path = MODEL_PATH,
     """
     Load the trained ResNet-18 checkpoint.
     """
-    # pick GPU if available, otherwise CPU
+    # loads using gpu if not cpu
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device)
 
-    # fail early with a clear message if the checkpoint is missing
+    # no checkpoint
     if not Path(model_path).exists():
         raise FileNotFoundError(
             f"Rotation model not found at {model_path}.\n"
@@ -50,55 +49,55 @@ def load_rotation_model(model_path: str | Path = MODEL_PATH,
     # load checkpoint and rebuild the same architecture used in training
     ckpt = torch.load(str(model_path), map_location=device)
     model = models.resnet18(weights=None)
+
     # swap the final layer to match the 4 rotation classes
     model.fc = torch.nn.Linear(model.fc.in_features, 4)
     model.load_state_dict(ckpt["state_dict"])
-    # eval mode disables dropout and batchnorm updates
     model.to(device).eval()
 
-    # print a quick summary of which checkpoint got loaded
+    # print loaded checkpoint
     val_acc = ckpt.get("val_acc", 0.0)
     print(f"Loaded rotation model  (val_acc={val_acc:.1%}  epoch={ckpt.get('epoch','?')})")
 
     return {"model": model, "device": device, "val_acc": val_acc}
 
 
-# test time augmentation variants, run the model on each and average the result
+# augmentation variants to average result 
 _TTA_VARIANTS = [
-    # original image with no change
     lambda img: img,
-    # slightly darker, helps with bright captures
+    # slightly darker
     lambda img: ImageEnhance.Brightness(img).enhance(0.85),
-    # slightly brighter, helps with dim captures
+    # slightly brighter
     lambda img: ImageEnhance.Brightness(img).enhance(1.15),
-    # lower contrast, helps with high contrast captures
+    # lower contrast
     lambda img: ImageEnhance.Contrast(img).enhance(0.80),
-    # higher contrast, helps with flat or washed out captures
+    # higher contrast
     lambda img: ImageEnhance.Contrast(img).enhance(1.20),
 ]
 
 
 def predict_rotation(image_path: str | Path,
                      rot_model: dict) -> tuple[int, float]:
-    """Predict rotation (0-3) using test-time augmentation over photometric variants."""
+    """Predict rotation (0-3)"""
     model = rot_model["model"]
     device = rot_model["device"]
 
-    # load the image once, then reuse across all TTA variants
+    # load the image
     base_img = Image.open(str(image_path)).convert("RGB")
     probs_sum = None
 
     # no gradients needed during inference
     with torch.no_grad():
         for fn in _TTA_VARIANTS:
-            # apply the variant, transform, and add a batch dimension
+            # apply the variant
             tensor = _INFERENCE_TRANSFORM(fn(base_img)).unsqueeze(0).to(device)
-            # softmax turns raw logits into class probabilities
+            # converts to prob for interpratibility
             probs = F.softmax(model(tensor), dim=1).squeeze(0)
+
             # accumulate probabilities across all variants
             probs_sum = probs if probs_sum is None else probs_sum + probs
 
-    # average across variants, then pick the most likely class
+    # average across variants then pick the most likely class
     probs_avg = probs_sum / len(_TTA_VARIANTS)
     rotation = int(probs_avg.argmax().item())
     confidence = float(probs_avg[rotation].item())
@@ -107,16 +106,9 @@ def predict_rotation(image_path: str | Path,
 
 def match_rotation_resnet(path: str, family_id: str,
                           rot_model: dict) -> tuple[str, float]:
-    """
-    replacement for image_match.match_rotation().
-
-    Has the same signature shape just pass rot_model instead of
-    model/preprocess/embeddings/bias/game_embeddings.
-
-    Returns (tile_id, confidence_score) exactly like the original.
-    """
     # find the base ID for this tile family, rotations are the next 3 IDs
     base = (int(family_id.replace("ID", "")) // 4) * 4
+
     # run the model and figure out the rotated tile ID
     rotation, confidence = predict_rotation(path, rot_model)
     tile_id = f"ID{base + rotation}"
@@ -127,7 +119,6 @@ def match_rotation_resnet(path: str, family_id: str,
 # python cv/rotation_classifier.py path/to/crop.jpg [family_id]
 if __name__ == "__main__":
     import sys
-    # need at least an image path, family ID is optional
     if len(sys.argv) < 2:
         print("Usage: python cv/rotation_classifier.py <image_path> [family_id]")
         sys.exit(1)

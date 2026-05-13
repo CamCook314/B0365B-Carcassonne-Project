@@ -8,6 +8,7 @@ const CELL = 52; // tile size + gap
 export default function GameBoard({ tiles = [], meeples = [], validPlacements = [], onTileClick }) {
   const [selectedTile, setSelectedTile] = useState(null);
 
+  // work out the board bounds and convert tile and ghost grid coords into pixel positions
   const { placedTiles, ghostTiles, width, height } = useMemo(() => {
     const allCols = [...tiles.map(t => t.col), ...validPlacements.map(v => v[0])];
     const allRows = [...tiles.map(t => t.row), ...validPlacements.map(v => v[1])];
@@ -19,16 +20,18 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
     const minRow = Math.min(...allRows);
     const maxRow = Math.max(...allRows);
 
+    // flip the row axis so higher row values render upward like a normal grid
     const px = (col, row) => ({ left: (col - minCol) * CELL, top: (maxRow - row) * CELL });
 
     return {
       placedTiles: tiles.map(t => ({ ...t, ...px(t.col, t.row) })),
-      ghostTiles: [...new Map(validPlacements.map(([x, y]) => [`${x},${y}`, { col: x, row: y, ...px(x, y) }])).values()],
+      ghostTiles: validPlacements.map(([x, y]) => ({ col: x, row: y, ...px(x, y) })),
       width: (maxCol - minCol + 1) * CELL,
       height: (maxRow - minRow + 1) * CELL,
     };
   }, [tiles, validPlacements]);
 
+  // group meeples by tile position so each tile can look up its own meeples quickly
   const meepleLookup = useMemo(() => {
     const map = {};
     for (const m of meeples) {
@@ -39,6 +42,7 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
     return map;
   }, [meeples]);
 
+  // toggle selection clicking the same tile twice deselects it
   const handleClick = (tile) => {
     setSelectedTile(prev =>
       prev && prev.col === tile.col && prev.row === tile.row ? null : tile
@@ -60,7 +64,7 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
             <>
               <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width, height, position: "relative" }}>
 
-                {/* Ghost tiles (valid placements) */}
+                {/* Ghost tiles to show valid placements */}
                 {ghostTiles.map(g => (
                   <div key={`g-${g.col},${g.row}`} className="tile tile-ghost" style={{ left: g.left, top: g.top }} title={`Valid: (${g.col}, ${g.row})`}>
                     <span className="ghost-plus">+</span>
@@ -79,10 +83,13 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
                     {t.tileId ? (
                       <img src={`/tiles/${t.tileId}.jpg`} alt={t.tileId} draggable={false}
                         style={{ width: "100%", height: "100%", borderRadius: 3, objectFit: "cover" }}
+
+                        // if the tile image fails to load, fall back to showing the ID as text
                         onError={e => { e.target.style.display = "none"; e.target.parentElement.textContent = t.tileId; }}
                       />
                     ) : <span style={{ fontSize: 11, color: "var(--dim)" }}>?</span>}
 
+                    {/* render each meeple on this tile, positioned by side */}
                     {(meepleLookup[`${t.col},${t.row}`] || []).map((m, i) => (
                       <div key={i} className={`meeple meeple-${m.side || "centre"}`} style={{ background: PLAYER_COLORS[m.playerIndex] || "#888" }} />
                     ))}

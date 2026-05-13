@@ -6,6 +6,7 @@ export default function DetectedTile({ pendingTile, validPlacements, pendingTile
   return <div className="card card-detect">
     <div className="card-header">
       <span>Detected Tile</span>
+      {/* green tag when CV has detected a tile plain tag while still waiting */}
       <span
         className={`card-tag ${pendingTile ? "card-tag-green" : ""}`}
       >
@@ -24,6 +25,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
     return <div className="card-body" style={{ textAlign: "center" }}>
         {pendingTile ? (
             <>
+                {/* use image for tile preview */}
                 <div className="tile-preview">
                     <img
                         src={`/tiles/${pendingTile}.jpg`}
@@ -54,6 +56,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
                 <TileCandidates pendingTileList={pendingTileList} refresh={refresh} />
             </>
         ) : (
+            // fallback view shown before the CV has detected anything
             <>
                 <div className="tile-preview">—</div>
                 <div className="tile-name"><p>Waiting for CV...</p></div>
@@ -63,6 +66,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
 }
 
 function TileCandidates({ pendingTileList, refresh }) {
+    // local state for the manual override input and any validation error message
     const [manualInput, setManualInput] = useState("");
     const [error, setError] = useState("");
 
