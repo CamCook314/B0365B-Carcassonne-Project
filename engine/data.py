@@ -46,14 +46,14 @@ class lord(player): # steals point from random player with > 1 score when scorin
 		super().__init__(0)
 
 	def ability(self, structure, game):
-		play_list = []
+		max_play = None
+
 		if structure.type == 2:
 			for play in game.players:
-				if play.score >= 1:
-					play_list.append(play)
+				if play.score > max_play:
+					max_play = play
 			self.score += 1
-			choice = random.choice(play_list)	
-			choice.score -= 1	
+			max_play.score -= 1
 				
 
 
@@ -166,9 +166,9 @@ class gameStateClass:
 		overstayed = []
 		for til in self.tile_dict_turn:
 			roll = random.random()
-			if roll < 0.05: # 5% chance
+			if roll < 0.02: # 5% chance
 				til.bad_tile = True
-			elif roll > 0.95:
+			elif roll > 0.98:
 				til.good_tile = True
 
 			self.tile_dict_turn[til] += 1
@@ -363,6 +363,8 @@ class gameStateClass:
 				for entry in structure.tiles_used:
 					t = entry[0] if isinstance(entry, tuple) else entry
 					if t is tile:
+						if structure.players:
+							raise ValueError("Structure already has meeple, please remove meeple")
 						structure.add_player(player)
 						player.meeples -= 1
 						return
@@ -379,6 +381,8 @@ class gameStateClass:
 			for entry in structure.tiles_used:
 				t = entry[0] if isinstance(entry, tuple) else entry
 				if t is tile:
+					if structure.players:
+							raise ValueError("Structure already has meeple, please remove meeple")
 					structure.add_player(player)
 					player.meeples -= 1
 					return
