@@ -3,6 +3,10 @@ from tile import tile
 from events import Event
 # Variable declarations
 import random
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from cv import projector
 
 class player:
 
@@ -46,7 +50,7 @@ class lord(player): # steals point from random player with > 1 score when scorin
 		super().__init__(0)
 
 	def ability(self, structure, game):
-		max_play = None
+		max_play = game.players[0]
 
 		if structure.type == 2:
 			for play in game.players:
@@ -157,10 +161,11 @@ class gameStateClass:
 				if (randx, randy) not in [e.coords for e in self.event_pool] and (randx, randy) not in self.river_struct: #unique coords
 					self.event_pool.append(Event((randx, randy)))
 					print(Event((randx, randy)))
+					projector.add_img("EVENT", (randx, randy))
 					break
 	
 	#for 3 turns after its placed, every turn the tile has a 5% chance to either turn good or bad, effects are permanent
-	def good_tile_bad_tile(self, tile): #runs every turn
+	def good_tile_bad_tile(self, tile,x, y): #runs every turn
 		self.tile_dict_turn[tile] = 0
 
 		overstayed = []
@@ -168,8 +173,10 @@ class gameStateClass:
 			roll = random.random()
 			if roll < 0.02: # 5% chance
 				til.bad_tile = True
+				projector.add_img("BAD_TILE", (x, y))
 			elif roll > 0.98:
 				til.good_tile = True
+				projector.add_img("GOOD_TILE", (x, y))
 
 			self.tile_dict_turn[til] += 1
 			if self.tile_dict_turn[til] >= 3: #only 3 turns to change
@@ -234,9 +241,10 @@ class gameStateClass:
 		tile.player_placed = self.current_player()
 		for event in self.event_pool:
 			if event.coords == (x, y):
+				projector.del_img("EVENT", (x, y))
 				event.play(self)
 
-		self.good_tile_bad_tile(tile)
+		self.good_tile_bad_tile(tile, x, y)
 		
 
 
