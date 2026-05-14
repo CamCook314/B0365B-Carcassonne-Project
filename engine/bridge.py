@@ -16,7 +16,6 @@ Then polls CV globals every 100 ms and makes the appropriate API calls:
 
 import sys
 import shutil
-import os
 import time
 import threading
 import subprocess
@@ -34,6 +33,35 @@ from cv import projector
 import api as engine_api
 
 API_BASE = "http://127.0.0.1:1234"
+
+# Camera processing resolution — must match PROC_W/PROC_H in Project_CV.py
+_CV_PROC_W = 1920
+_CV_PROC_H = 1080
+
+_last_proj_tile_size: float | None = None   # tracks last calibrated value to avoid redundant calls
+
+
+def _sync_projector_calibration():
+    """Derive projector tile size and origin from CV's measured grid and push to projector."""
+    global _last_proj_tile_size
+    tile_size = Project_CV.grid_tile_size
+    origin    = Project_CV.grid_origin
+    if tile_size is None or origin is None:
+        return
+    if projector.proj_w is None or projector.proj_h is None:
+        return
+    if tile_size == _last_proj_tile_size:
+        return  # already up to date
+    scale_x = projector.proj_w / _CV_PROC_W
+    scale_y = projector.proj_h / _CV_PROC_H
+    proj_origin      = (round(origin[0] * scale_x), round(origin[1] * scale_y))
+    proj_tile_size   = round(tile_size * scale_x)   # X spacing
+    proj_tile_size_y = round(tile_size * scale_y)   # Y spacing (projector is 16:10, camera is 16:9)
+    projector.set_proj_calibration(origin=proj_origin, tile_size=proj_tile_size,
+                                   tile_size_y=proj_tile_size_y)
+    _last_proj_tile_size = tile_size
+    print(f"[bridge] Projector calibration updated — origin={proj_origin}"
+          f"  tile_size={proj_tile_size}px (x)  {proj_tile_size_y}px (y)")
 
 
 # ── API helpers ───────────────────────────────────────────────────────────────
@@ -98,6 +126,31 @@ def _post(path: str, body: dict) -> dict | None:
         return None
 
 
+def _debug_proj_alignment(vp_tuples: list):
+    """Print camera-PROC pixel vs projector pixel for each valid grid position.
+
+    Helps tune PROJ_OFFSET_X / PROJ_OFFSET_Y in cv/config.json when the
+    projected outlines are visually offset from the physical tile positions.
+    """
+    gox = Project_CV.grid_origin
+    ts  = Project_CV.grid_tile_size
+    if gox is None or ts is None:
+        return
+    pox, poy = projector.proj_origin
+    pts_x    = projector.proj_tile_size
+    pts_y    = projector.proj_tile_size_y
+    ox, oy   = gox
+    print(f"[proj-align] cam_origin=({ox},{oy})  cam_tile={ts}px  "
+          f"proj_origin=({pox},{poy})  proj_tile=({pts_x}x,{pts_y}y)px  "
+          f"offset=({projector.PROJ_OFFSET_X},{projector.PROJ_OFFSET_Y})")
+    for gx, gy in vp_tuples:
+        cam_x = round(ox + gx * ts)
+        cam_y = round(oy - gy * ts)
+        prj_x = round(pox + gx * pts_x)
+        prj_y = round(poy - gy * pts_y)
+        print(f"  grid({gx:+d},{gy:+d}):  cam=({cam_x},{cam_y})  proj=({prj_x},{prj_y})")
+
+
 def _handle_tile_checked():
     tile_id    = Project_CV.tile_id
     candidates = Project_CV.tile_candidates   # list of (score, tile_id) tuples
@@ -113,8 +166,17 @@ def _handle_tile_checked():
     print(f"[bridge] tile_checked - tile={tile_id}  candidates={candidate_ids[:3]}...")
     resp = _post("/pending", {"tile_id": tile_id, "candidates": candidate_ids})
     if resp and "error" not in resp:
-        print(f"[bridge] /pending OK - {len(resp.get('valid_positions', []))} valid positions")
+        vp = resp.get("valid_positions", [])
+        vp_tuples = [(int(p[0]), int(p[1])) for p in vp]
+        Project_CV.valid_placements = set(vp_tuples)
+        # Don't project for the origin tile — grid not yet placed, anywhere is valid
+        if Project_CV.grid_origin is not None:
+            projector.set_proj_valid(vp_tuples)
+        print(f"[bridge] /pending OK - {len(vp)} valid positions")
+        _debug_proj_alignment(vp_tuples)
     else:
+        Project_CV.valid_placements = None
+        projector.clear_proj_valid()
         print(f"[bridge] /pending error: {resp}")
 
     Project_CV.tile_checked = False
@@ -133,6 +195,12 @@ def _handle_cv_to_engine():
         confirmed_id = resp.get("placed")
         _last_placed_id = confirmed_id
         print(f"[bridge] /place OK - placed {confirmed_id} at {resp.get('position')}")
+        # Clear projection BEFORE signalling CV to proceed.
+        # Wait for the projector thread to confirm it has rendered a blank frame
+        # so the camera sees no projection before rotation matching or meeple baseline.
+        Project_CV.valid_placements = None
+        projector.clear_proj_valid()
+        projector.proj_blank_rendered.wait(timeout=0.5)
         Project_CV.game_response = (True, 1)
         _update_remaining_families()
         _save_id_crop_as_game_ref(confirmed_id)
@@ -243,6 +311,7 @@ def main():
     try:
         # Wait for the frontend to POST /start before entering the game loop
         while engine_api.game_state is None:
+            _sync_projector_calibration()
             time.sleep(0.1)
 
         game = engine_api.game_state
@@ -264,8 +333,19 @@ def main():
 
             while not turn_done:
                 try:
+                    _sync_projector_calibration()
+
                     if Project_CV.tile_checked:
                         _handle_tile_checked()
+
+                    # Tile just confirmed as placed — clear projection NOW so the rotation
+                    # crop (taken ~2s later at MEEPLE_BASELINE_SETTLE) sees a clean image.
+                    if Project_CV.proj_clear_requested:
+                        Project_CV.valid_placements = None
+                        projector.clear_proj_valid()
+                        projector.proj_blank_rendered.wait(timeout=0.5)
+                        Project_CV.proj_clear_requested = False
+                        print("[bridge] Projection cleared early for rotation crop.")
 
                     if Project_CV.cv_to_engine:
                         _handle_cv_to_engine()

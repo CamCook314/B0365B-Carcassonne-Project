@@ -23,10 +23,10 @@ export default function DetectedTile({ pendingTile, validPlacements, pendingTile
         {pendingTile ? "DETECTED" : "WAITING"}
       </span>
     </div>
-    <CardBody 
-        pendingTile={pendingTile} 
-        validPlacements={validPlacements} 
-        pendingTileList={pendingTileList} 
+    <CardBody
+        pendingTile={pendingTile}
+        validPlacements={validPlacements}
+        pendingTileList={pendingTileList}
         refresh={refresh} />
   </div>;
 }
@@ -45,11 +45,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
     return <div className="card-body" style={{ textAlign: "center" }}>
         {pendingTile ? (
             <>
-<<<<<<< HEAD
                 {/* use image for tile preview */}
-=======
-                {/* Tile preview image — hides itself if the image asset is missing */}
->>>>>>> e734b5d647f6e37442d0cb3c9aeff57340ac57fb
                 <div className="tile-preview">
                     <img
                         src={`/tiles/${pendingTile}.jpg`}
@@ -86,17 +82,13 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
                 <TileCandidates pendingTileList={pendingTileList} refresh={refresh} />
             </>
         ) : (
-<<<<<<< HEAD
             // fallback view shown before the CV has detected anything
-=======
-            /* Waiting state shown when CV has not yet detected a tile */
->>>>>>> e734b5d647f6e37442d0cb3c9aeff57340ac57fb
             <>
                 <div className="tile-preview">—</div>
                 <div className="tile-name"><p>Waiting for CV...</p></div>
             </>
         )}
-    </div>; 
+    </div>;
 }
 
 /**
@@ -108,11 +100,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
  * @param {function} refresh - Callback to refresh game state after an override.
  */
 function TileCandidates({ pendingTileList, refresh }) {
-<<<<<<< HEAD
     // local state for the manual override input and any validation error message
-=======
-    // Controlled input value for the manual tile ID entry field
->>>>>>> e734b5d647f6e37442d0cb3c9aeff57340ac57fb
     const [manualInput, setManualInput] = useState("");
     // Validation error message shown beneath the input when entry is invalid
     const [error, setError] = useState("");
@@ -205,7 +193,7 @@ function TileCandidates({ pendingTileList, refresh }) {
                     >
                         {/* Tile thumbnail — hidden silently if the asset doesn't exist */}
                         <img
-                            src={`/tiles/ID${tileId*4}.jpg`}
+                            src={`/tiles/${tileId}.jpg`}
                             alt={tileId}
                             style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 3 }}
                             onError={(e) => { e.target.style.display = "none"; }}

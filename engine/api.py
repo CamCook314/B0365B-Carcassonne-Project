@@ -262,14 +262,17 @@ def _resolve_pending(tile_id):
         base_num = int(tile_id.replace("ID", "")) // 4
 
     all_valid = get_valid_placements_all_rotations(game_state, base_num)
+    pending_tile = f"ID{base_num * 4}"
+
     if not all_valid:
-        return None, "No valid placements for this tile"
-    
+        pending_valid = []
+        projector.clear_proj_valid()
+        return {"tile_id": pending_tile, "valid_positions": []}, None
+
     # Extract all valid coords for valid tile placements
     valid_coords = list(all_valid.keys())
     projector.set_proj_valid(valid_coords) # Send coords to projector to display
 
-    pending_tile = f"ID{base_num * 4}"
     # Expand to one entry per (position, rotation) so /place can validate any rotation CV detects.
     pending_valid = [[x, y, rid] for (x, y), rids in all_valid.items() for rid in rids]
     # Return unique positions only — frontend only needs to know where tiles can go, not which rotation.
