@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { getGameState, getHistory } from '../api/api.js';
+import Swal from 'sweetalert2';
+import { getGameState, getHistory, clearNotification } from '../api/api.js';
 import { POLLING_INTERVAL } from '../constants/config.js';
 
 export function useGameState(playSound = null) {
@@ -21,6 +22,11 @@ export function useGameState(playSound = null) {
         if (previousGameStateRef.current.current_player !== data.current_player) {
           playSound('placeMeeple');
         }
+      }
+
+      if (data.notification) {
+        clearNotification().catch(() => {});
+        Swal.fire(data.notification);
       }
 
       setGameState(data);

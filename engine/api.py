@@ -57,6 +57,64 @@ pending_valid = []           # list of [x, y, rotation_id]
 pending_candidates = []      # ranked list of tile_id strings from CV top-N matches
 pending_placement = None     # {"x", "y", "tile_id", "tile"} — set by /place, cleared by /meeple or /meeple/skip
 game_over = False            # flipped True by /end after final scoring
+pending_notification = None  # Swal payload set by /notify, cleared by /notify/clear
+
+# ── Notification type definitions ────────────────────────────────────────────
+# Each entry maps to a SweetAlert2 options dict.
+# CV (or any caller) posts {"type": "<key>"} to /notify to trigger the popup.
+# Add new entries here to define more notification types.
+NOTIFICATION_TYPES = {
+    # ── Game events ───────────────────────────────────────────────────────────
+    "volcano": {
+        "title": "Volcano!",
+        "text": "Smoke pours from the marked land. Surround the tile within 8 turns or all meeples are removed!",
+        "icon": "warning",
+        "confirmButtonText": "Understood",
+    },
+    "volcano_erupted": {
+        "title": "The Volcano Erupts!",
+        "text": "The volcano has erupted! All meeples on surrounding tiles have been removed.",
+        "icon": "error",
+        "confirmButtonText": "Oh no!",
+    },
+    "extra_turn": {
+        "title": "Extra Turn!",
+        "text": "The court astrologer reads good omens. This player gets an extra turn!",
+        "icon": "info",
+        "confirmButtonText": "Nice!",
+    },
+    "unrest": {
+        "title": "Unrest!",
+        "text": "Whispers of revolt fill the streets. Cities score half points for the next 4 turns.",
+        "icon": "warning",
+        "confirmButtonText": "Noted",
+    },
+    # ── CV errors ─────────────────────────────────────────────────────────────
+    "cv_low_confidence": {
+        "title": "Tile Not Recognised",
+        "text": "The camera couldn't identify the tile with enough confidence. Try repositioning it under the camera.",
+        "icon": "question",
+        "confirmButtonText": "Try Again",
+    },
+    "cv_invalid_placement": {
+        "title": "Invalid Placement",
+        "text": "That tile can't be placed there. Move it to a highlighted valid position.",
+        "icon": "error",
+        "confirmButtonText": "OK",
+    },
+    "cv_no_board": {
+        "title": "Board Not Detected",
+        "text": "The camera can't see the board. Check the camera angle and lighting.",
+        "icon": "error",
+        "confirmButtonText": "OK",
+    },
+    "cv_multiple_tiles": {
+        "title": "Multiple Tiles Detected",
+        "text": "More than one new tile was detected. Please place only one tile at a time.",
+        "icon": "warning",
+        "confirmButtonText": "Got it",
+    },
+}
 
 
 def build_active_events(game):
@@ -167,6 +225,7 @@ def get_gamestate():
         "pending_placement": pending_placement_serialised,
         "game_over": game_over,
         "active_events": build_active_events(game_state),
+        "notification": pending_notification,
     })
 
 
@@ -200,6 +259,49 @@ def debug_event():
         return jsonify({"error": f"Unknown event name: {name}"}), 400
 
     return jsonify({"status": "ok", "name": name, "enabled": enabled})
+
+
+@app.route('/notify', methods=['POST'])
+def send_notification():
+    """Trigger a SweetAlert2 popup on the frontend.
+
+    Body: {"type": "<key>"}  — must match a key in NOTIFICATION_TYPES.
+    Optional overrides: any Swal field (title, text, icon, confirmButtonText, …)
+    can be included in the body to override the defaults for that type.
+
+    Or use {"type": "custom", "title": "…", "text": "…", "icon": "…"} for a
+    one-off popup not defined in NOTIFICATION_TYPES.
+    """
+    global pending_notification
+
+    data = request.get_json() or {}
+    ntype = data.get("type")
+    if not ntype:
+        return jsonify({"error": "Missing 'type' field"}), 400
+
+    if ntype == "custom":
+        payload = {k: v for k, v in data.items() if k != "type"}
+        if not payload.get("title") and not payload.get("text"):
+            return jsonify({"error": "Custom notification requires at least 'title' or 'text'"}), 400
+    else:
+        base = NOTIFICATION_TYPES.get(ntype)
+        if base is None:
+            return jsonify({
+                "error": f"Unknown notification type: '{ntype}'. "
+                         f"Known types: {list(NOTIFICATION_TYPES.keys())} (or 'custom')"
+            }), 400
+        payload = {**base, **{k: v for k, v in data.items() if k != "type"}}
+
+    pending_notification = payload
+    return jsonify({"status": "ok", "notification": payload})
+
+
+@app.route('/notify/clear', methods=['POST'])
+def clear_notification():
+    """Frontend calls this after displaying the notification to dismiss it."""
+    global pending_notification
+    pending_notification = None
+    return jsonify({"status": "ok"})
 
 
 @app.route('/start', methods=['POST'])
@@ -615,7 +717,7 @@ def end_game():
 
 @app.route('/reset', methods=['POST'])
 def reset_game():
-    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement, game_over
+    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement, game_over, pending_notification
     game_state = None
     tile_bag_instance = None
     pending_tile = None
@@ -623,6 +725,7 @@ def reset_game():
     pending_candidates = []
     pending_placement = None
     game_over = False
+    pending_notification = None
     return jsonify({"status": "ok"})
 
 

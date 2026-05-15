@@ -151,6 +151,15 @@ export async function rotateTile(row, col) {
 }
 
 
+export async function clearNotification() {
+  const res = await fetch(`${BASE_URL}/notify/clear`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to clear notification");
+  }
+  return res.json();
+}
+
 export async function resetGame() {
   const res = await fetch(`${BASE_URL}/reset`, { method: "POST" });
   if (!res.ok) {

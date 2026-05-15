@@ -9,6 +9,7 @@ import cv2 as cv
 import numpy as np
 import ctypes
 import os, sys
+import requests
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cv import image_match
 from cv.rotation_classifier import load_rotation_model, match_rotation_resnet
@@ -1011,6 +1012,7 @@ def cv_main_loop():
                 phase               = INVALID_DISPLAY
                 removal_frame_count = 0
                 print("Placement rejected. Remove tile and reposition.")
+                requests.post("http://127.0.0.1:1234/notify", json={"type": "cv_invalid_placement"}, timeout=1)
 
         panel_w, panel_h = DISP_W // 2, DISP_H // 2
         def to_bgr(img):
