@@ -23,10 +23,10 @@ export default function DetectedTile({ pendingTile, validPlacements, pendingTile
         {pendingTile ? "DETECTED" : "WAITING"}
       </span>
     </div>
-    <CardBody 
-        pendingTile={pendingTile} 
-        validPlacements={validPlacements} 
-        pendingTileList={pendingTileList} 
+    <CardBody
+        pendingTile={pendingTile}
+        validPlacements={validPlacements}
+        pendingTileList={pendingTileList}
         refresh={refresh} />
   </div>;
 }
@@ -88,7 +88,7 @@ function CardBody({ pendingTile, validPlacements, pendingTileList, refresh }) {
                 <div className="tile-name"><p>Waiting for CV...</p></div>
             </>
         )}
-    </div>; 
+    </div>;
 }
 
 /**
@@ -193,7 +193,7 @@ function TileCandidates({ pendingTileList, refresh }) {
                     >
                         {/* Tile thumbnail — hidden silently if the asset doesn't exist */}
                         <img
-                            src={`/tiles/ID${tileId*4}.jpg`}
+                            src={`/tiles/${tileId}.jpg`}
                             alt={tileId}
                             style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 3 }}
                             onError={(e) => { e.target.style.display = "none"; }}

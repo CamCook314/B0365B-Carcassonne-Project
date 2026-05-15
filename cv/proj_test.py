@@ -1,5 +1,8 @@
-import Project_CV
-import projector
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from cv import Project_CV
+from cv import projector
 import threading
 import time
 from textwrap import dedent

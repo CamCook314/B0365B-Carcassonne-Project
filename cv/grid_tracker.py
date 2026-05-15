@@ -199,19 +199,25 @@ class GridTracker:
         if tile_size > 0:
             angle_deg = np.degrees(np.arctan2(b, a))
             # Sanity check: reject refits that wildly deviate from the current fit.
-            # A bad centroid (arm still visible, wrong blob) can skew 3-point fits severely.
+            # A bad centroid (arm still visible, wrong blob) can skew fits severely.
+            # Thresholds are relaxed early-game (few data points) since the initial
+            # tile_size estimate from the origin blob is rough, and a slight board
+            # angle won't be visible until several placements have accumulated.
             if self.a is not None:
+                n = len(self.tile_centroids)
                 prev_size  = self.tile_size_px
                 prev_angle = np.degrees(np.arctan2(self.b, self.a))
                 size_change  = abs(tile_size - prev_size) / prev_size
                 angle_change = abs(angle_deg - prev_angle)
-                if size_change > 0.15:
+                size_thresh  = 0.25 if n <= 4 else 0.20
+                angle_thresh = 10.0 if n <= 4 else 8.0
+                if size_change > size_thresh:
                     print(f"Grid refit rejected: tile_size {prev_size:.1f}→{tile_size:.1f}px "
-                          f"({size_change*100:.0f}% change — outlier centroid?)")
+                          f"({size_change*100:.0f}% change, n={n})")
                     return
-                if angle_change > 5.0:
+                if angle_change > angle_thresh:
                     print(f"Grid refit rejected: angle {prev_angle:.1f}°→{angle_deg:.1f}° "
-                          f"({angle_change:.1f}° change — outlier centroid?)")
+                          f"({angle_change:.1f}° change, n={n})")
                     return
             self.origin_px = (origin_x, origin_y)
             self.a         = float(a)

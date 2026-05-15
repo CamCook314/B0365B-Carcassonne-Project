@@ -24,6 +24,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 STUDIO_DIR = ROOT / "assets" / "tile_photos" / "edit"
 GAME_DIR = ROOT / "cv" / "game_refs"
+LIVE_CROPS_DIR = ROOT / "cv" / "live_id_crops"
 OUT_MODEL = ROOT / "cv" / "rotation_model.pth"
 
 # hyperparameters for training
@@ -187,7 +188,7 @@ def train(args):
 
     # collect data samples and split into train val sets
     print("\nScanning data sources:")
-    all_samples = _collect_samples([STUDIO_DIR, GAME_DIR])
+    all_samples = _collect_samples([STUDIO_DIR, GAME_DIR, LIVE_CROPS_DIR])
     if not all_samples:
         print("ERROR: no images found. Check STUDIO_DIR path.")
         sys.exit(1)
@@ -286,6 +287,7 @@ def train(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train ResNet-18 rotation classifier")
+    parser.add_argument("--epochs", type=int, default=EPOCHS)
     args = parser.parse_args()
 
     train(args)

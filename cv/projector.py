@@ -2,9 +2,25 @@ import cv2 as cv
 import numpy as np
 import screeninfo
 import time
+import json
+import os
 from . import Project_CV
 from collections import defaultdict
 import threading
+
+# Manual projector alignment offsets in projector pixels.
+# Set PROJ_OFFSET_X / PROJ_OFFSET_Y in cv/config.json to nudge the projected
+# grid until the outlines land on the correct physical positions.
+_CFG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+PROJ_OFFSET_X = 0
+PROJ_OFFSET_Y = 0
+if os.path.exists(_CFG_PATH):
+    with open(_CFG_PATH) as _f:
+        _pcfg = json.load(_f)
+    PROJ_OFFSET_X = _pcfg.get("PROJ_OFFSET_X", 0)
+    PROJ_OFFSET_Y = _pcfg.get("PROJ_OFFSET_Y", 0)
+if PROJ_OFFSET_X or PROJ_OFFSET_Y:
+    print(f"[projector] Manual offset from config: dx={PROJ_OFFSET_X}  dy={PROJ_OFFSET_Y}")
 
 # Display FLAG
 projector_display = threading.Event()
@@ -26,11 +42,53 @@ valid_flag = False   # Flag to tell projector to project valid tiles
 valid_tiles = None  # Variable to store set of valid tile coordinates
 valid_lock = threading.Lock()
 
+# Signalled by the projector loop after it renders a frame with no valid tiles.
+# Bridge waits on this before unblocking CV for rotation matching / meeple baseline.
+proj_blank_rendered = threading.Event()
+proj_blank_rendered.set()  # starts "clear" — no projection showing at startup
+
+## PROJECTOR DISPLAY INDEX
+# 0 = primary monitor, 1 = first extended display, 2 = second, etc.
+# Run once to see all detected monitors printed at startup, then set this.
+PROJECTOR_INDEX = 3
+
 ## TILE SIZE
 TILE_SIZE = 65
 
-## EVENT IMAGE SIZE
-EVENT_SIZE = round(0.6 * TILE_SIZE)
+## VALID-PLACEMENT MARKER — hollow outline drawn slightly LARGER than the tile.
+## Drawing the outline outside the tile boundary means magenta projector light
+## falls on the table around the slot, not on the tile surface when placed.
+## The magenta filter in blob_pipeline removes the thin line from blob detection
+## so it doesn't form a false contour, but tile pixels are unaffected.
+VALID_MARKER_SCALE     = 1.15  # outline rect is 115% of the tile size
+VALID_MARKER_THICKNESS = 4
+
+## EVENT MARKER SIZE — filled marker for non-placement event indicators only.
+## Placement markers no longer use a fixed pixel size (see VALID_MARKER_SCALE).
+MARKER_SIZE = round(0.6 * TILE_SIZE)
+EVENT_SIZE  = round(0.6 * TILE_SIZE)
+
+## PROJECTOR COORDINATE SYSTEM
+# proj_origin: projector pixel (x, y) of grid position (0, 0) — set to screen
+#              centre at startup to match the startup cross, updated by CV once
+#              the grid is established via set_proj_calibration().
+# proj_tile_size: projector pixels per tile — derived from camera tile size × scale.
+proj_origin      = None   # set in projector_main() once resolution is known
+proj_tile_size   = TILE_SIZE   # projector pixels per tile — X axis
+proj_tile_size_y = TILE_SIZE   # projector pixels per tile — Y axis (may differ due to aspect ratio)
+
+# Projector resolution — set in projector_main(); read by CV to compute scale factor.
+proj_w = None
+proj_h = None
+
+def set_proj_calibration(origin=None, tile_size=None, tile_size_y=None):
+    global proj_origin, proj_tile_size, proj_tile_size_y
+    if origin is not None:
+        proj_origin      = (origin[0] + PROJ_OFFSET_X, origin[1] + PROJ_OFFSET_Y)
+    if tile_size is not None:
+        proj_tile_size   = tile_size
+    if tile_size_y is not None:
+        proj_tile_size_y = tile_size_y
 
 ## IMAGE DICTIONARY LOCK
 img_lock = threading.Lock()
@@ -88,19 +146,22 @@ def startup(canvas, centre_x, centre_y):
     font = cv.FONT_HERSHEY_SIMPLEX
     scale = 1
     lineType = cv.LINE_AA
-    canvas = cv.putText(canvas, text, org, font, scale, colour, 2, lineType)
+    #canvas = cv.putText(canvas, text, org, font, scale, colour, 2, lineType)
     return canvas
 
-# Function that calculates a given coords tile centre point, and start and eng pixel coords
-def tile_grid_points(grid_origin, grid_tile_size, tile_coord, img_size):
-    origin = grid_origin # centre point of board
-    tile_x = round(grid_tile_size * tile_coord[0] * 1.1) # X coord
-    tile_y = round(grid_tile_size * tile_coord[1]) # Y coord
-    # Find the tile origin, Y axis is flipped due to starting in top left as (0,0)
-    tile_origin = (origin[0] + tile_x, origin[1] - tile_y) 
-    # Calculate the start and end points based on tile origin
+# Function that calculates a given coords tile centre point, and start and end pixel coords.
+# grid_tile_size is the projector-pixel spacing per grid unit in X;
+# tile_size_y is the spacing in Y (defaults to grid_tile_size if not given).
+def tile_grid_points(grid_origin, grid_tile_size, tile_coord, img_size, tile_size_y=None):
+    if tile_size_y is None:
+        tile_size_y = grid_tile_size
+    origin = grid_origin
+    tile_x = round(grid_tile_size * tile_coord[0])
+    tile_y = round(tile_size_y    * tile_coord[1])
+    # Y axis is flipped: positive grid-Y = upward on projector canvas
+    tile_origin = (origin[0] + tile_x, origin[1] - tile_y)
     tile_start = (tile_origin[0] - (img_size // 2), tile_origin[1] + (img_size // 2))
-    tile_end = (tile_origin[0] + (img_size // 2), tile_origin[1] - (img_size // 2))
+    tile_end   = (tile_origin[0] + (img_size // 2), tile_origin[1] - (img_size // 2))
     return (tile_start, tile_end, tile_origin)
 
 # Function that sets the invalid move border flag
@@ -117,7 +178,7 @@ def clear_invalid():
 
 # Function that draws the invalid move border
 def set_invalid_border(canvas, width, height):
-    colour = (0, 0, 255) # RED
+    colour = (255, 0, 255) # Magenta — filtered by blob_pipeline's proj_magenta mask
     thickness = 10
     cv.rectangle(canvas, (0, 0), (width - 1, height - 1), colour, thickness)
     return canvas
@@ -136,7 +197,7 @@ def clear_valid():
 
 # Function that draws the valid move border
 def set_valid_border(canvas, width, height):
-    colour = (0, 255, 0) # GREEN
+    colour = (255, 0, 255) # Magenta — filtered by blob_pipeline's proj_magenta mask
     thickness = 10
     cv.rectangle(canvas, (0, 0), (width - 1, height - 1), colour, thickness)
     return canvas
@@ -155,7 +216,7 @@ def clear_event():
 
 # Function the draws the event border
 def set_event_border(canvas, width, height):
-    colour = (255, 255, 0) # CYAN
+    colour = (255, 0, 255) # Magenta — filtered by blob_pipeline's proj_magenta mask
     thickness = 10
     cv.rectangle(canvas, (0, 0), (width - 1, height - 1), colour, thickness)
     return canvas
@@ -175,95 +236,66 @@ def clear_proj_valid():
     with valid_lock:
         valid_flag = False
         valid_tiles = None
+    proj_blank_rendered.clear()  # projector hasn't rendered the blank frame yet
 
-# Function to display all valid tile placement locations for a tile
+# Function to display all valid tile placement locations for a tile.
+# Draws a hollow magenta outline slightly larger than the tile so the projector
+# light hits the table around the slot, not the tile surface itself.
 def project_valids(canvas, grid_origin, grid_tile_size, tile_coords):
-    colour = (0, 255, 0) # Green
-    thickness = -1 # Full square
-    cross_colour = (0, 100, 0) # Dark Green
-    cross_thickness = 2
-    # For each coord draw a green square with a dark green plus in the middle
+    colour     = (255, 0, 255)  # Magenta
+    outline_sz = max(1, round(grid_tile_size * VALID_MARKER_SCALE))
     for coord in tile_coords:
-        tile_data = tile_grid_points(grid_origin, grid_tile_size, coord, EVENT_SIZE)
-        cv.rectangle(canvas, tile_data[0], tile_data[1], colour, thickness)
-        cv.drawMarker(canvas, tile_data[2], cross_colour, cv.MARKER_CROSS, 20, cross_thickness)
+        tile_data = tile_grid_points(grid_origin, grid_tile_size, coord, outline_sz, proj_tile_size_y)
+        cv.rectangle(canvas, tile_data[0], tile_data[1], colour, VALID_MARKER_THICKNESS)
     return canvas
 
 
 # EVENT TYPES
 ## EVENT TILE
 def event_tile(canvas, grid_origin, grid_tile_size, tile_coord):
-    # Get coordinate centre and corner points
-    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, EVENT_SIZE)
-    back_colour = (255, 255, 0) # CYAN
-    text_colour = (0, 0, 255) # RED
-    back_thickness = -1  # Full square
-    cv.rectangle(canvas, tile_data[0], tile_data[1], back_colour, back_thickness)
+    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, EVENT_SIZE, proj_tile_size_y)
+    colour = (0, 165, 255) # ORANGE
+    cv.rectangle(canvas, tile_data[0], tile_data[1], colour, -1)
     text = "?"
-    font = cv.FONT_HERSHEY_SIMPLEX
-    # Get centre pixel point of tile
-    org = tile_data[2]
-    # Edit text start point so text is in centre
-    org = (org[0] - 9, org[1] + 11)
-    scale = 1
-    lineType = cv.LINE_AA
-    canvas = cv.putText(canvas, text, org, font, scale, text_colour, 2, lineType)
+    org = (tile_data[2][0] - 9, tile_data[2][1] + 11)
+    canvas = cv.putText(canvas, text, org, cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2, cv.LINE_AA)
     return canvas
 
 ## BAD TILE (ALL TILES COMBINED FOR PROTOTYPE)
 def event_bad_tile(canvas, grid_origin, grid_tile_size, tile_coord):
-    # Get coordinate centre and corner points
-    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, TILE_SIZE)
-    colour = (123, 255, 177) # PALE GREEN
-    thickness = -1 # Full square
-    cv.rectangle(canvas, tile_data[0], tile_data[1], colour, thickness)
+    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, MARKER_SIZE, proj_tile_size_y)
+    cv.rectangle(canvas, tile_data[0], tile_data[1], (0, 165, 255), -1) # ORANGE
     return canvas
 
 ## GOOD TILE (ALL TILES COMBINED FOR PROTOTYPE)
 def event_good_tile(canvas, grid_origin, grid_tile_size, tile_coord):
-    # Get coordinate centre and corner points
-    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, TILE_SIZE)
-    colour = (0, 215, 255) # GOLD
-    thickness = -1 # Full square
-    cv.rectangle(canvas, tile_data[0], tile_data[1], colour, thickness)
+    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, MARKER_SIZE, proj_tile_size_y)
+    cv.rectangle(canvas, tile_data[0], tile_data[1], (0, 165, 255), -1) # ORANGE
     return canvas
 
 ## REVERSE MOVE ORDER
 def event_reverse_move(canvas, grid_origin, grid_tile_size, tile_coord):
-    # Get coordinate centre and corner points
-    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, EVENT_SIZE)
-    colour = (255, 0, 0) # BLUE
-    thickness = -1 # Full square
-    cv.rectangle(canvas, tile_data[0], tile_data[1], colour, thickness)
+    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, EVENT_SIZE, proj_tile_size_y)
+    cv.rectangle(canvas, tile_data[0], tile_data[1], (0, 165, 255), -1) # ORANGE
     return canvas
 
 ## MORE SCORE
 def event_more_score(canvas, grid_origin, grid_tile_size, tile_coord):
-    # Get coordinate centre and corner points
-    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, EVENT_SIZE)
-    colour = (0, 255, 0) # GREEN
-    thickness = -1 # Full square
-    cv.rectangle(canvas, tile_data[0], tile_data[1], colour, thickness)
+    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, EVENT_SIZE, proj_tile_size_y)
+    cv.rectangle(canvas, tile_data[0], tile_data[1], (0, 165, 255), -1) # ORANGE
     return canvas
 
 ## VOLCANO
 def event_volcano(canvas, grid_origin, grid_tile_size, tile_coord):
-    # Get coordinate centre and corner points
-    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, TILE_SIZE)
-    colour = (0, 70, 255) # ORANGE
-    thickness = -1 # Full square
-    cv.rectangle(canvas, tile_data[0], tile_data[1], colour, thickness)
+    tile_data = tile_grid_points(grid_origin, grid_tile_size, tile_coord, MARKER_SIZE, proj_tile_size_y)
+    cv.rectangle(canvas, tile_data[0], tile_data[1], (0, 165, 255), -1) # ORANGE
     return canvas
 
 ## CITY UNREST
 def event_unrest(canvas, grid_origin, grid_tile_size, tile_coords):
-    colour = (128, 128, 255) # LIGHT RED
-    thickness = -1 # Means full square
-    # Repeat for each coordinate given
     for coord in tile_coords:
-        # Get coordinate centre and corner points
-        tile_data = tile_grid_points(grid_origin, grid_tile_size, coord, TILE_SIZE)
-        cv.rectangle(canvas, tile_data[0], tile_data[1], colour, thickness)
+        tile_data = tile_grid_points(grid_origin, grid_tile_size, coord, MARKER_SIZE, proj_tile_size_y)
+        cv.rectangle(canvas, tile_data[0], tile_data[1], (0, 165, 255), -1) # ORANGE
     return canvas
 
 # Function to tell projector thread to stop displaying and to start exiting
@@ -276,17 +308,30 @@ def projector_main():
     # Get screens info, projector in extend mode is classed as extra screen
     monitors = screeninfo.get_monitors()
     # Check to make sure monitor is connected
-    while len(monitors) == 1:
+    while len(monitors) <= PROJECTOR_INDEX:
+        print(f"[projector] Waiting for display index {PROJECTOR_INDEX} "
+              f"(only {len(monitors)} monitor(s) detected)...")
         time.sleep(1)
+        monitors = screeninfo.get_monitors()
+
+    print("[projector] Detected monitors:")
+    for i, m in enumerate(monitors):
+        marker = " ← selected" if i == PROJECTOR_INDEX else ""
+        print(f"  [{i}] {m.width}x{m.height}  offset=({m.x},{m.y})  name={m.name}{marker}")
 
     # Get project screen settings
-    projector = monitors[1]
-    # Define projector resolution
+    projector = monitors[PROJECTOR_INDEX]
+    # Define projector resolution and expose at module level for CV calibration
+    global proj_w, proj_h
     proj_w, proj_h = projector.width, projector.height
+    print(f"[projector] Using display [{PROJECTOR_INDEX}]: {proj_w}x{proj_h}")
 
-    # Centre point of the display
+    # Centre point of the display — also the default projector grid origin
     centre_w = proj_w // 2
     centre_h = proj_h // 2
+    global proj_origin
+    if proj_origin is None:
+        proj_origin = (centre_w, centre_h)
 
     # Set up projector window
     cv.namedWindow("Projector", cv.WINDOW_NORMAL)
@@ -310,28 +355,20 @@ def projector_main():
                 # For each key check the event and then place the event in the coords stored in value
                 # This event is only displayed with a set of coords not indiviudally
                 if key == "UNREST":
-                        canvas = event_unrest(canvas, Project_CV.grid_origin, 
-                                            round(Project_CV.grid_tile_size), values)
-                # The events belows can have multiple occurances at the same time
+                        canvas = event_unrest(canvas, proj_origin, proj_tile_size, values)
                 for value in values:
                     if key == "REVERSE":
-                        canvas = event_reverse_move(canvas, Project_CV.grid_origin,
-                                                    round(Project_CV.grid_tile_size), value)
+                        canvas = event_reverse_move(canvas, proj_origin, proj_tile_size, value)
                     elif key == "MORE_SCORE":
-                        canvas = event_more_score(canvas, Project_CV.grid_origin,
-                                                    round(Project_CV.grid_tile_size), value)
+                        canvas = event_more_score(canvas, proj_origin, proj_tile_size, value)
                     elif key == "EVENT":
-                        canvas = event_tile(canvas, Project_CV.grid_origin, 
-                                            round(Project_CV.grid_tile_size), value)
+                        canvas = event_tile(canvas, proj_origin, proj_tile_size, value)
                     elif key == "VOLCANO":
-                        canvas = event_volcano(canvas, Project_CV.grid_origin, 
-                                            round(Project_CV.grid_tile_size), value)
+                        canvas = event_volcano(canvas, proj_origin, proj_tile_size, value)
                     elif key == "BAD_TILE":
-                        canvas = event_bad_tile(canvas, Project_CV.grid_origin, 
-                                            round(Project_CV.grid_tile_size), value)
+                        canvas = event_bad_tile(canvas, proj_origin, proj_tile_size, value)
                     elif key == "GOOD_TILE":
-                        canvas = event_good_tile(canvas, Project_CV.grid_origin, 
-                                            round(Project_CV.grid_tile_size), value)
+                        canvas = event_good_tile(canvas, proj_origin, proj_tile_size, value)
             # Check for displaying the valid tile placement border
             with valid_b_lock:
                 if valid_border:
@@ -346,15 +383,17 @@ def projector_main():
                     canvas = set_event_border(canvas, proj_w, proj_h)
             # Check for displaying all posible valid moves for the given tile
             with valid_lock:
-                if valid_flag:
-                    canvas = project_valids(canvas, Project_CV.grid_origin, 
-                                            Project_CV.grid_tile_size, valid_tiles)
-            
-        # Show image
+                showing_valid = valid_flag
+                if showing_valid:
+                    canvas = project_valids(canvas, proj_origin, proj_tile_size, valid_tiles)
+
+        # Show image — must happen before signalling proj_blank_rendered so bridge
+        # doesn't proceed until the blank frame has actually been sent to the display.
         cv.imshow("Projector", canvas)
-        # Wait for any key and then exit
-        # Exit if pressed - exit button
-        c = cv.waitKey(1)
+        cv.waitKey(1)
+        # Signal AFTER waitKey so the frame is in the display pipeline before CV proceeds.
+        if Project_CV.grid_origin is not None and not showing_valid:
+            proj_blank_rendered.set()
         #Qif c == ord('q'):
         #    break
         time.sleep(0.1)

@@ -13,7 +13,7 @@ import requests
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cv import image_match
 from cv.rotation_classifier import load_rotation_model, match_rotation_resnet
-from cv.blob_pipeline import process_frame, mask_centroid, find_contours, classify_contours
+from cv.blob_pipeline import process_frame, mask_centroid, find_contours, classify_contours, MORPH_CLOSE_KERNEL
 from cv.grid_tracker import GridTracker
 from cv.meeple_detector import detect_meeple, CROP_HALF_FRAC
 import time
@@ -41,6 +41,9 @@ remaining_families     = None    # Bridge updates after each placement; set of f
 valid_meeple_sides     = None    # Bridge sets after placement: list of valid sides for the tile
 last_id_crop_path      = None    # Path to the most recently saved identification crop (set by CV, read by bridge)
 last_placed_crop_path  = None    # Path to the most recently saved placed-slot crop (set during WAIT_MEEPLE, read by bridge)
+valid_placements       = None    # Bridge sets from /pending response: set of (gx, gy) coords valid for the current tile
+tile_blob_area         = None    # Area of the origin tile blob in proc pixels; used as dynamic area filter reference
+proj_clear_requested   = False   # CV sets when a tile is confirmed; bridge clears projection and resets this
 
 
 _SIDE_VECTORS = {
@@ -83,12 +86,16 @@ def crop_placed_slot(frame, slot_px, tile_size_px, proc_scale, board_angle_deg,
     y2_roi = min(int(cy) + side + margin, frame.shape[0])
     roi = frame[y1_roi:y2_roi, x1_roi:x2_roi]
 
-    print(f"  [crop_placed_slot] src={'center' if center_px is not None else 'slot'}"
-          f"  proc=({src[0]:.0f},{src[1]:.0f})  full-res=({cx:.0f},{cy:.0f})"
-          f"  frame={frame.shape[1]}x{frame.shape[0]}"
-          f"  tile_size_px={tile_size_px:.1f}  ts={ts:.1f}  side={side}"
-          f"  ROI=({x1_roi},{y1_roi})->({x2_roi},{y2_roi})  roi_shape={roi.shape}"
-          f"  angle={board_angle_deg:.1f}°")
+    if center_px is not None:
+        dx, dy = center_px[0] - slot_px[0], center_px[1] - slot_px[1]
+        src_label = f"centroid (offset {dx:+.0f},{dy:+.0f} PROC px from grid)"
+    else:
+        src_label = "grid"
+    print(f"  [crop_placed_slot] using={src_label}  "
+          f"grid_proc=({slot_px[0]:.0f},{slot_px[1]:.0f})  "
+          f"crop_proc=({src[0]:.0f},{src[1]:.0f})  full-res=({cx:.0f},{cy:.0f})"
+          f"  tile_size_px={tile_size_px:.1f}  side={side}"
+          f"  ROI=({x1_roi},{y1_roi})->({x2_roi},{y2_roi})  angle={board_angle_deg:.1f}°")
 
     cx_roi = cx - x1_roi
     cy_roi = cy - y1_roi
@@ -316,7 +323,7 @@ def cv_main_loop():
     # the growth counter, so one flickering frame doesn't undo 2+ growth frames.
     non_growth_count = 0
 
-    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, valid_meeple_sides, last_id_crop_path, last_placed_crop_path
+    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, valid_meeple_sides, last_id_crop_path, last_placed_crop_path, valid_placements, tile_blob_area, proj_clear_requested
 
     print("Place the first tile on the board — it will be detected automatically. Press 'b' to force-confirm.")
 
@@ -339,7 +346,8 @@ def cv_main_loop():
 
         proc_frame = cv.resize(frame, (PROC_W, PROC_H))
         edges, density, blobs, sat_blobs = process_frame(proc_frame)
-        valid  = find_contours(blobs)
+        _area_min = int(tile_blob_area * 0.5) if tile_blob_area else None
+        valid  = find_contours(blobs, area_min=_area_min)
         result = proc_frame.copy()
 
         # ── Board not set yet ─────────────────────────────────────────────────
@@ -365,6 +373,7 @@ def cv_main_loop():
                 board_mask      = np.zeros(blobs.shape, dtype=np.uint8)
                 cv.drawContours(board_mask, [first], -1, 255, -1)
                 prev_board_area   = cv.contourArea(first)
+                tile_blob_area    = cv.contourArea(first)
                 prev_sat_area     = cv.countNonZero(cv.bitwise_and(sat_blobs, board_mask))
                 stable_board_mask = board_mask.copy()   # Committed baseline for diff
                 set_board              = False
@@ -378,7 +387,7 @@ def cv_main_loop():
                 (_, _), (rw_f, rh_f), _ = rect_f
                 grid_tracker.a  = float(max(rw_f, rh_f))
                 grid_tracker.b  = 0.0
-                grid_origin    = tuple(grid_tracker.origin_px)
+                grid_origin    = (int(grid_tracker.origin_px[0]), int(grid_tracker.origin_px[1]))
                 grid_tile_size = grid_tracker.tile_size_px
                 grid_angle     = 0.0
                 print(f"Board origin set at pixel ({origin[0]:.0f}, {origin[1]:.0f})"
@@ -562,16 +571,34 @@ def cv_main_loop():
                                 if stable_board_mask is not None else old_board_mask
 
                         growth_frame_count  += 1
-                        candidate_board_cnt  = new_board_cnt
+                        # Guard against board-boundary and hand-contaminated blobs
+                        # corrupting new_mask/prev_board_area. Only update candidate
+                        # if the contour is within 3× the committed tile cluster footprint.
+                        _max_cnt_area = (cv.countNonZero(stable_board_mask) * 3
+                                         if stable_board_mask is not None else float('inf'))
+                        if cv.contourArea(new_board_cnt) < _max_cnt_area or candidate_board_cnt is None:
+                            candidate_board_cnt = new_board_cnt
                         remaining = GROWTH_CONFIRM_FRAMES - growth_frame_count
                         cv.putText(result, f"Confirming placement... ({remaining} frames)",
                                    (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 2)
 
                         if growth_frame_count >= GROWTH_CONFIRM_FRAMES:
+                            # Diagnostic: log stable_board_mask state so state corruption is visible.
+                            if grid_tracker is not None and stable_board_mask is not None:
+                                sm_px = cv.countNonZero(stable_board_mask)
+                                print(f"  [diag] stable_board_mask={sm_px}px  "
+                                      f"placed_tiles={len(grid_tracker.placed_tiles)}  "
+                                      f"open_slots={len(list(grid_tracker.open_slots()))}")
+
                             new_mask  = np.zeros(blobs.shape, dtype=np.uint8)
                             cv.drawContours(new_mask, [candidate_board_cnt], -1, 255, -1)
                             diff_mask = cv.subtract(new_mask, pre_growth_mask) \
                                         if pre_growth_mask is not None else new_mask
+                            diff_total = cv.countNonZero(diff_mask)
+                            new_total  = cv.countNonZero(new_mask)
+                            pre_total  = cv.countNonZero(pre_growth_mask) if pre_growth_mask is not None else 0
+                            print(f"  [diag] new_mask={new_total}px  pre_growth={pre_total}px  "
+                                  f"diff={diff_total}px")
 
                             # Diff centroid — diagnostic only.  Slot detection uses
                             # sat_in_diff coverage (immune to MORPH_CLOSE halo bias).
@@ -588,10 +615,12 @@ def cv_main_loop():
                             # sat_in_diff = sat_blobs & diff_mask — keeps only real tile pixels.
                             # MORPH_CLOSE halos are empty table surface (zero saturation) so they
                             # score exactly 0, eliminating halo contamination entirely.
-                            # Minimum slot coverage: 25% of tile bounding box area.
-                            # Scales with tile_size so small transient blobs (arm/hand
-                            # near an existing tile) don't trigger a false placement.
-                            min_slot_cov = max(200, int(grid_tracker.tile_size_px ** 2 * 0.25))
+                            # Minimum slot coverage: 15% of tile bounding box area.
+                            # Lowered from 25% to tolerate partial occlusion (hand) or
+                            # projector-magenta filter chewing into the placed tile blob.
+                            # The 20% margin check below still guards against false
+                            # positives from arm/hand blobs spreading across slots.
+                            min_slot_cov = max(200, int(grid_tracker.tile_size_px ** 2 * 0.15))
 
                             sat_in_diff = cv.bitwise_and(sat_blobs, diff_mask)
                             best_slot, top_cov = grid_tracker.best_coverage_slot(sat_in_diff)
@@ -638,15 +667,26 @@ def cv_main_loop():
                                     print(f"  Grid: best slot → {best_slot} "
                                           f"({top_cov} {label}-px, {margin:.0%} margin)")
 
-                            # Cross-validate: if the diff centroid isn't near any open slot
-                            # the dominant blob is arm/hand, not the placed tile — reject.
+                            # Reject any slot not in the engine's valid positions.
+                            # Guards against stale placed_tiles / stable_board_mask causing
+                            # an already-occupied slot to score highest.
+                            if best_slot is not None and valid_placements is not None \
+                                    and len(valid_placements) > 0:
+                                if best_slot not in valid_placements:
+                                    print(f"  Grid: slot {best_slot} rejected — not in engine's "
+                                          f"{len(valid_placements)} valid positions.")
+                                    best_slot = None
+
+                            # Diagnostic only: log if the raw diff centroid and coverage
+                            # disagree, but do NOT reject on that basis.
+                            # The raw centroid is unreliable as a gate because:
+                            #   • MORPH_CLOSE fill drags it toward the board centre
+                            #   • The player's arm in frame biases it toward the edge
+                            # Arm/hand protection is provided by min_slot_cov (25% tile area
+                            # of high-sat pixels required) + the margin check (>20%).
                             if best_slot is not None and diff_cx is not None:
                                 centroid_slot = grid_tracker.closest_slot(diff_cx, diff_cy)
-                                if centroid_slot is None:
-                                    print(f"  diff centroid ({diff_cx:.0f},{diff_cy:.0f}) not near "
-                                          f"any slot — arm/hand blob, retrying.")
-                                    best_slot = None
-                                elif centroid_slot != best_slot:
+                                if centroid_slot is not None and centroid_slot != best_slot:
                                     print(f"  NOTE: diff centroid suggests {centroid_slot}, "
                                           f"coverage chose {best_slot}")
 
@@ -666,28 +706,33 @@ def cv_main_loop():
                                     if stable_board_mask is not None else None
 
                                 # Build a clean committed mask: previous stable state
-                                # plus just the confirmed slot's bounding box.
-                                # This avoids baking arm/hand pixels into the baseline.
+                                # plus the confirmed slot's bounding box extended by
+                                # MORPH_CLOSE_KERNEL//2 so the rectangle covers the full
+                                # blob halo.  Without this, the contour fill in new_mask
+                                # includes the halo but stable_board_mask doesn't, so the
+                                # diff shows halo pixels as false "new tile" content.
                                 slot_px = grid_tracker.grid_to_px(*best_slot)
                                 ts      = int(grid_tracker.tile_size_px)
+                                pad     = MORPH_CLOSE_KERNEL // 2
                                 sm      = stable_board_mask.copy() \
                                           if stable_board_mask is not None \
                                           else np.zeros(blobs.shape, dtype=np.uint8)
-                                x1s = max(0,              slot_px[0] - ts // 2)
-                                y1s = max(0,              slot_px[1] - ts // 2)
-                                x2s = min(blobs.shape[1], slot_px[0] + ts // 2)
-                                y2s = min(blobs.shape[0], slot_px[1] + ts // 2)
+                                x1s = max(0,              slot_px[0] - ts // 2 - pad)
+                                y1s = max(0,              slot_px[1] - ts // 2 - pad)
+                                x2s = min(blobs.shape[1], slot_px[0] + ts // 2 + pad)
+                                y2s = min(blobs.shape[0], slot_px[1] + ts // 2 + pad)
                                 sm[y1s:y2s, x1s:x2s] = 255
                                 stable_board_mask = sm
 
-                                # board_mask (already set from new_board_cnt on line 244)
-                                # reflects the live state — keep it but base the growth
-                                # baseline on the clean stable mask so arm pixels don't
-                                # inflate prev_board_area.
-                                prev_board_area = cv.countNonZero(stable_board_mask)
+                                # Use new_mask (current board contour fill) as the growth
+                                # baseline — it matches the same measurement used each frame,
+                                # so the margin stays consistent regardless of how much padding
+                                # stable_board_mask adds for diff accuracy.
+                                prev_board_area = cv.countNonZero(new_mask)
                                 prev_sat_area   = cv.countNonZero(
-                                    cv.bitwise_and(sat_blobs, stable_board_mask))
+                                    cv.bitwise_and(sat_blobs, new_mask))
                                 tile_saved           = False
+                                proj_clear_requested = True   # ask bridge to kill projection now so crop is clean
                                 phase                   = WAIT_MEEPLE
                                 meeple_frame_count      = 0
                                 meeple_detect_count     = 0
@@ -713,12 +758,30 @@ def cv_main_loop():
                                       f"sc=({sc_x},{sc_y})  diff=({diff_cx},{diff_cy})  "
                                       f"use=({use_cx:.0f},{use_cy:.0f})"
                                       f"  slot_px={slot_px}  tile_size_px={grid_tracker.tile_size_px:.1f}")
-                                grid_tracker.confirm_placement(best_slot, use_cx, use_cy)
-                                grid_origin    = tuple(grid_tracker.origin_px)
+
+                                # If the projector was showing a marker AT this slot, the
+                                # magenta filter removed those pixels and biased the centroid.
+                                # Feed the grid-predicted center instead to keep the refit clean.
+                                refit_cx, refit_cy = use_cx, use_cy
+                                if (valid_placements and best_slot in valid_placements
+                                        and grid_origin is not None):
+                                    refit_cx, refit_cy = float(slot_px[0]), float(slot_px[1])
+                                    print(f"  [centroid] Projection was active at {best_slot} — "
+                                          f"using grid center ({slot_px[0]},{slot_px[1]}) for "
+                                          f"refit (observed was ({use_cx:.0f},{use_cy:.0f}))")
+                                grid_tracker.confirm_placement(best_slot, refit_cx, refit_cy)
+                                grid_origin    = (int(grid_tracker.origin_px[0]), int(grid_tracker.origin_px[1]))
                                 grid_tile_size = grid_tracker.tile_size_px
                                 grid_angle     = float(np.degrees(np.arctan2(grid_tracker.b, grid_tracker.a)))
                                 last_placed_coord = best_slot
                                 print(f"Tile placed at grid {best_slot} — ready for next tile.")
+                                _oslots = grid_tracker.open_slots()
+                                print(f"  [open-slots] origin=({grid_tracker.origin_px[0]:.0f},{grid_tracker.origin_px[1]:.0f})"
+                                      f"  a={grid_tracker.a:.2f}  b={grid_tracker.b:.2f}"
+                                      f"  tile_size={grid_tracker.tile_size_px:.1f}px  angle={grid_angle:.1f}°")
+                                for _s in sorted(_oslots):
+                                    _pt = grid_tracker.grid_to_px(*_s)
+                                    print(f"  [open-slots]   {_s} → PROC px ({_pt[0]},{_pt[1]})")
 
                                 # Recompute slot centre using the refitted grid model.
                                 # The pre-refit slot_px can be off before enough tiles exist
@@ -795,7 +858,7 @@ def cv_main_loop():
                             placed_crop = crop_placed_slot(
                                 frame, pending_refitted_px, grid_tracker.tile_size_px,
                                 proc_scale, board_angle,
-                                center_px=pending_validated_center)
+                                center_px=None)  # always use refitted grid; centroid biased by magenta filter
                             placed_path = os.path.join(CROPS_DIR, f"placed_{save_count - 1:04d}.png")
                             cv.imwrite(placed_path, placed_crop)
                             last_placed_crop_path = placed_path
@@ -867,9 +930,10 @@ def cv_main_loop():
                             meeple_direction = final_direction
                             meeple_placed    = True
                     else:
-                        meeple_detect_count     = 0
-                        candidate_meeple_dir    = None
-                        candidate_meeple_colour = None
+                        meeple_detect_count = max(0, meeple_detect_count - 1)
+                        if meeple_detect_count == 0:
+                            candidate_meeple_dir    = None
+                            candidate_meeple_colour = None
                         # Exclude blobs that overlap committed tile positions —
                         # a placed tile separated from the main blob by a gap
                         # wider than MORPH_CLOSE appears as "unplaced" but is not.

@@ -58,6 +58,15 @@ def process_frame(frame, sat_threshold=SAT_THRESHOLD):
     hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
     _, sat_blobs = cv.threshold(hsv[:, :, 1], sat_threshold, 255, cv.THRESH_BINARY)
 
+    # Suppress projected magenta (valid-placement markers, borders) from both detection paths.
+    # Wide HSV range + dilation to catch edge-of-projector artifacts where the reflected
+    # light is oblique and loses both hue accuracy and saturation.
+    proj_magenta = cv.inRange(hsv, (130, 40, 40), (175, 255, 255))
+    proj_magenta = cv.dilate(proj_magenta,
+                             cv.getStructuringElement(cv.MORPH_RECT, (5, 5)))
+    edge_blobs[proj_magenta > 0] = 0
+    sat_blobs[proj_magenta > 0]  = 0
+
     blobs   = cv.bitwise_or(edge_blobs, sat_blobs)
     open_k  = cv.getStructuringElement(cv.MORPH_RECT, (MORPH_OPEN_KERNEL,  MORPH_OPEN_KERNEL))
     close_k = cv.getStructuringElement(cv.MORPH_RECT, (MORPH_CLOSE_KERNEL, MORPH_CLOSE_KERNEL))
@@ -75,12 +84,14 @@ def mask_centroid(mask):
     return None
 
 
-def find_contours(blobs):
+def find_contours(blobs, area_min=None):
     """Find external contours and filter by area and aspect ratio."""
+    if area_min is None:
+        area_min = TILE_AREA_MIN
     contours, _ = cv.findContours(blobs, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     valid = []
     for c in contours:
-        if not (TILE_AREA_MIN < cv.contourArea(c) < TILE_AREA_MAX):
+        if not (area_min < cv.contourArea(c) < TILE_AREA_MAX):
             continue
         _, _, w, h = cv.boundingRect(c)
         if w == 0 or h == 0:
@@ -110,8 +121,23 @@ def classify_contours(valid, board_mask, blob_shape):
         overlap = cv.countNonZero(cv.bitwise_and(board_mask, m))
         overlaps.append((overlap, cnt))
 
-    best_overlap, board_cnt = max(overlaps, key=lambda x: x[0])
-    new_board_cnt = board_cnt if best_overlap > 0 else None
-    unplaced      = [cnt for overlap, cnt in overlaps if overlap == 0]
+    # Among contours with board overlap, filter to ratio >= 0.5 to exclude the
+    # physical board edge (near-zero ratio).  Then pick by largest absolute overlap
+    # so the full cluster+new_tile (large overlap, ratio ~0.85) beats a small
+    # fragment (tiny overlap, ratio ~1.0) that can appear when the magenta
+    # projection filter removes pixels from the placed tile.
+    scored = [
+        (ov / max(cv.contourArea(cnt), 1), ov, cnt)
+        for ov, cnt in overlaps if ov > 0
+    ]
+    if scored:
+        candidates = [(r, ov, cnt) for r, ov, cnt in scored if r >= 0.5]
+        if not candidates:
+            candidates = scored  # fallback: all overlapping contours
+        _, _, board_cnt = max(candidates, key=lambda x: x[1])
+        new_board_cnt = board_cnt
+    else:
+        new_board_cnt = None
 
+    unplaced = [cnt for overlap, cnt in overlaps if overlap == 0]
     return new_board_cnt, unplaced
