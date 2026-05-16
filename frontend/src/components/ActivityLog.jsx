@@ -1,9 +1,15 @@
 import { getHistory } from "../api/api";
-import { PLAYER_COLOURS } from "../constants/config";
+
+const COLOUR_EMOJI = {
+  red: "🟥", blue: "🟦", green: "🟩", yellow: "🟨", black: "🟪",
+};
+const COLOUR_EMOJI_MEEPLE = {
+  red: "🔴", blue: "🔵", green: "🟢", yellow: "🟡", black: "🟣",
+};
 
 let historyLength = 0;
 
-export function ActivityLog( { history }) {
+export function ActivityLog( { history, players = [] }) {
     if (!history || history.length === 0) {
         return (
             <div className="card card-log">
@@ -30,9 +36,9 @@ export function ActivityLog( { history }) {
     <div className="card-body" style={{ maxHeight: "200px", overflowY: "auto" }}>
             {newTiles ? newTiles.map((entry, index) => (
                 <div key={index} className="log-entry">
-                    <p>{`${convertPlayerToColour(newTiles[index]?.current_player)} placed `}</p>
+                    <p>{`${colourEmoji(newTiles[index]?.current_player, players)} placed `}</p>
                     <img style={{width: 30, height: 30, display: "inline-block", verticalAlign: "middle"}} src={`/tiles/${newTiles[index]?.tile_id}.jpg`} alt={newTiles[index]?.tile_id} />
-                    <p>{` at (${newTiles[index]?.position}) ${newTiles[index]?.meeple_attached ? convertPlayerToColourMeeple(newTiles[index]?.current_player) : ''}`}</p>
+                    <p>{` at (${newTiles[index]?.position}) ${newTiles[index]?.meeple_attached ? colourEmojiMeeple(newTiles[index]?.current_player, players) : ''}`}</p>
                 </div>
         )) : <p style={{ color: "var(--dim)" }}>Move history will appear here</p>}
     </div>
@@ -62,32 +68,12 @@ function findNewTiles(history) {
     return tiles;
 }
 
-function convertPlayerToColour(playerIndex) {
-    switch (playerIndex) {
-        case 0:
-            return "🟥"
-        case 1:
-            return "🟦"
-        case 2:
-            return "🟩"
-        case 3:
-            return "🟨"
-        case 4:
-            return "🟪"
-    }
+function colourEmoji(playerIndex, players) {
+    const colour = players[playerIndex]?.colour;
+    return COLOUR_EMOJI[colour] ?? "⬜";
 }
 
-function convertPlayerToColourMeeple(playerIndex) {
-    switch (playerIndex) {
-        case 0:
-            return "🔴"
-        case 1:
-            return "🔵"
-        case 2:
-            return "🟢"
-        case 3:
-            return "🟡"
-        case 4:
-            return "🟣"
-    }
+function colourEmojiMeeple(playerIndex, players) {
+    const colour = players[playerIndex]?.colour;
+    return COLOUR_EMOJI_MEEPLE[colour] ?? "⚪";
 }

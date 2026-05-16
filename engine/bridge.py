@@ -39,18 +39,20 @@ _CV_PROC_W = 1920
 _CV_PROC_H = 1080
 
 _last_proj_tile_size: float | None = None   # tracks last calibrated value to avoid redundant calls
+_last_proj_angle: float | None = None       # tracks last calibrated angle
 
 
 def _sync_projector_calibration():
-    """Derive projector tile size and origin from CV's measured grid and push to projector."""
-    global _last_proj_tile_size
+    """Derive projector tile size, origin, and rotation from CV's measured grid and push to projector."""
+    global _last_proj_tile_size, _last_proj_angle
     tile_size = Project_CV.grid_tile_size
     origin    = Project_CV.grid_origin
-    if tile_size is None or origin is None:
+    angle     = Project_CV.grid_angle
+    if tile_size is None or origin is None or angle is None:
         return
     if projector.proj_w is None or projector.proj_h is None:
         return
-    if tile_size == _last_proj_tile_size:
+    if tile_size == _last_proj_tile_size and angle == _last_proj_angle:
         return  # already up to date
     scale_x = projector.proj_w / _CV_PROC_W
     scale_y = projector.proj_h / _CV_PROC_H
@@ -58,10 +60,11 @@ def _sync_projector_calibration():
     proj_tile_size   = round(tile_size * scale_x)   # X spacing
     proj_tile_size_y = round(tile_size * scale_y)   # Y spacing (projector is 16:10, camera is 16:9)
     projector.set_proj_calibration(origin=proj_origin, tile_size=proj_tile_size,
-                                   tile_size_y=proj_tile_size_y)
+                                   tile_size_y=proj_tile_size_y, angle=angle)
     _last_proj_tile_size = tile_size
+    _last_proj_angle     = angle
     print(f"[bridge] Projector calibration updated — origin={proj_origin}"
-          f"  tile_size={proj_tile_size}px (x)  {proj_tile_size_y}px (y)")
+          f"  tile_size={proj_tile_size}px (x)  {proj_tile_size_y}px (y)  angle={angle:.2f}°")
 
 
 # ── API helpers ───────────────────────────────────────────────────────────────

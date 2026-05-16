@@ -31,7 +31,7 @@ export default function Grid({
         currentPlayer={currentPlayer}
         players={players}
       />
-      <ActivityLog history={history} />
+      <ActivityLog history={history} players={players} />
     </div>
     
 

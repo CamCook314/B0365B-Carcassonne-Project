@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Swal from 'sweetalert2';
-import { PLAYER_COLOURS } from "../constants/config";
+import { PLAYER_COLOUR_MAP } from "../constants/config";
 import { endGame } from '../api/api.js';
 
 export default function Players({ currentPlayer, players, refresh }) {
@@ -62,7 +62,7 @@ export default function Players({ currentPlayer, players, refresh }) {
         >
           <div
             className="player-avatar"
-            style={{ background: PLAYER_COLOURS[i] || "#888" }}
+            style={{ background: PLAYER_COLOUR_MAP[p.colour] || "#888" }}
           >
             {p.colour?.[0]?.toUpperCase() || i + 1}
           </div>
@@ -77,7 +77,7 @@ export default function Players({ currentPlayer, players, refresh }) {
           <div
             className="player-score"
             // colour the score text to match the player so its easy to scan
-            style={{ color: PLAYER_COLOURS[i] || "#888" }}
+            style={{ color: PLAYER_COLOUR_MAP[p.colour] || "#888" }}
           >
             {p.score}
           </div>

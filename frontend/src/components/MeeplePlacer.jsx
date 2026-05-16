@@ -1,5 +1,5 @@
 import { placeMeeple, skipMeeple } from "../api/api.js";
-import { PLAYER_COLOURS } from "../constants/config";
+import { PLAYER_COLOUR_MAP } from "../constants/config";
 
 // labels for each side
 const SIDE_LABEL = {
@@ -30,7 +30,7 @@ export default function MeeplePlacer({ pendingPlacement, currentPlayer, players 
 
   const { tile_id, x, y, valid_sides = [] } = pendingPlacement;
   const player = players?.[currentPlayer];
-  const playerColour = PLAYER_COLOURS[currentPlayer] || "#888";
+  const playerColour = PLAYER_COLOUR_MAP[player?.colour] || "#888";
   const meeplesLeft = player?.meeples ?? 0;
 
   const handlePlace = async (direction) => {

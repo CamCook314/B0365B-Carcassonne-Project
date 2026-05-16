@@ -76,19 +76,22 @@ EVENT_SIZE  = round(0.6 * TILE_SIZE)
 proj_origin      = None   # set in projector_main() once resolution is known
 proj_tile_size   = TILE_SIZE   # projector pixels per tile — X axis
 proj_tile_size_y = TILE_SIZE   # projector pixels per tile — Y axis (may differ due to aspect ratio)
+proj_angle       = 0.0         # board rotation in degrees — must match CV grid_angle
 
 # Projector resolution — set in projector_main(); read by CV to compute scale factor.
 proj_w = None
 proj_h = None
 
-def set_proj_calibration(origin=None, tile_size=None, tile_size_y=None):
-    global proj_origin, proj_tile_size, proj_tile_size_y
+def set_proj_calibration(origin=None, tile_size=None, tile_size_y=None, angle=None):
+    global proj_origin, proj_tile_size, proj_tile_size_y, proj_angle
     if origin is not None:
         proj_origin      = (origin[0] + PROJ_OFFSET_X, origin[1] + PROJ_OFFSET_Y)
     if tile_size is not None:
         proj_tile_size   = tile_size
     if tile_size_y is not None:
         proj_tile_size_y = tile_size_y
+    if angle is not None:
+        proj_angle       = angle
 
 ## IMAGE DICTIONARY LOCK
 img_lock = threading.Lock()
@@ -155,14 +158,17 @@ def startup(canvas, centre_x, centre_y):
 def tile_grid_points(grid_origin, grid_tile_size, tile_coord, img_size, tile_size_y=None):
     if tile_size_y is None:
         tile_size_y = grid_tile_size
-    origin = grid_origin
-    tile_x = round(grid_tile_size * tile_coord[0])
-    tile_y = round(tile_size_y    * tile_coord[1])
-    # Y axis is flipped: positive grid-Y = upward on projector canvas
-    tile_origin = (origin[0] + tile_x, origin[1] - tile_y)
-    tile_start = (tile_origin[0] - (img_size // 2), tile_origin[1] + (img_size // 2))
-    tile_end   = (tile_origin[0] + (img_size // 2), tile_origin[1] - (img_size // 2))
-    return (tile_start, tile_end, tile_origin)
+    gx, gy = tile_coord
+    angle_rad = np.radians(proj_angle)
+    cos_a = np.cos(angle_rad)
+    sin_a = np.sin(angle_rad)
+    # Full rotated formula matching the CV's grid_to_px, scaled to projector space.
+    # proj_tile_size applies to X-axis steps; proj_tile_size_y to Y-axis steps.
+    cx = round(grid_origin[0] + gx * grid_tile_size * cos_a + gy * grid_tile_size * sin_a)
+    cy = round(grid_origin[1] + gx * tile_size_y    * sin_a - gy * tile_size_y    * cos_a)
+    tile_start = (cx - img_size // 2, cy + img_size // 2)
+    tile_end   = (cx + img_size // 2, cy - img_size // 2)
+    return (tile_start, tile_end, (cx, cy))
 
 # Function that sets the invalid move border flag
 def set_invalid():

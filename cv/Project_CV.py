@@ -13,7 +13,7 @@ import requests
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from cv import image_match
 from cv.rotation_classifier import load_rotation_model, match_rotation_resnet
-from cv.blob_pipeline import process_frame, mask_centroid, find_contours, classify_contours, MORPH_CLOSE_KERNEL
+from cv.blob_pipeline import process_frame, mask_centroid, find_contours, classify_contours
 from cv.grid_tracker import GridTracker
 from cv.meeple_detector import detect_meeple, CROP_HALF_FRAC
 import time
@@ -705,24 +705,16 @@ def cv_main_loop():
                                 rollback_stable_board_mask = stable_board_mask.copy() \
                                     if stable_board_mask is not None else None
 
-                                # Build a clean committed mask: previous stable state
-                                # plus the confirmed slot's bounding box extended by
-                                # MORPH_CLOSE_KERNEL//2 so the rectangle covers the full
-                                # blob halo.  Without this, the contour fill in new_mask
-                                # includes the halo but stable_board_mask doesn't, so the
-                                # diff shows halo pixels as false "new tile" content.
-                                slot_px = grid_tracker.grid_to_px(*best_slot)
-                                ts      = int(grid_tracker.tile_size_px)
-                                pad     = MORPH_CLOSE_KERNEL // 2
-                                sm      = stable_board_mask.copy() \
-                                          if stable_board_mask is not None \
-                                          else np.zeros(blobs.shape, dtype=np.uint8)
-                                x1s = max(0,              slot_px[0] - ts // 2 - pad)
-                                y1s = max(0,              slot_px[1] - ts // 2 - pad)
-                                x2s = min(blobs.shape[1], slot_px[0] + ts // 2 + pad)
-                                y2s = min(blobs.shape[0], slot_px[1] + ts // 2 + pad)
-                                sm[y1s:y2s, x1s:x2s] = 255
-                                stable_board_mask = sm
+                                # Use the actual blob contour fill as the committed baseline.
+                                # Padded rectangles were used previously but don't match the
+                                # MORPH_CLOSE blob shape, leaving large off-centre regions in
+                                # the next diff (spurious pixels that bias the centroid and
+                                # coverage scores away from the actual new tile).  Using
+                                # new_mask directly means next turn's diff = next_blob -
+                                # this_blob, which cleanly shows only genuinely new pixels
+                                # regardless of how MORPH_CLOSE fills gaps between tiles.
+                                slot_px           = grid_tracker.grid_to_px(*best_slot)
+                                stable_board_mask = new_mask.copy()
 
                                 # Use new_mask (current board contour fill) as the growth
                                 # baseline — it matches the same measurement used each frame,
