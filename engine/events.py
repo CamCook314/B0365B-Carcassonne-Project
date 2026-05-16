@@ -1,13 +1,8 @@
 import random
-import requests
-
-_API = "http://127.0.0.1:1234"
-
-def _notify(type_name):
-    try:
-        requests.post(f"{_API}/notify", json={"type": type_name}, timeout=1)
-    except Exception:
-        pass
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from cv import projector
 
 # Note: To add a new event:
 '''
@@ -42,13 +37,13 @@ class Event:
     def extra_turn_event(self, game):
         self.name = "extra turn"
         game.extra_turn = True
-        _notify("extra_turn")
 
     def volcano_event(self, game): #gives 8 turns for players to have to fully surround the event tile other wise all meeples deleted
         self.name = "volcano"
         self.turn = game.current_turn
         self.active = True
-        _notify("volcano")
+        projector.add_img("VOLCANO", (self.coords[0], self.coords[1]))
+        
 
     def check_volcano(self, game): # runs every turn
         all_neighbors = [
@@ -63,14 +58,14 @@ class Event:
                     for j in game.players:
                         j.meeples = 7 #reset everybodys meeple counts
                     self.active = False
-                    _notify("volcano_erupted")
 
     def unrest_event(self, game): #all cities score half points for next 4 turns
         self.name = "unrest"
         self.turn = game.current_turn
         self.active = True
         game.unrest_check = True
-        _notify("unrest")
+        projector.add_img("UNREST", (self.coords[0], self.coords[1]))
+
     
     def check_unrest(self, game):
         if game.turnNum >= self.start_turn + 4: # change this to chance turns
