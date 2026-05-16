@@ -186,13 +186,13 @@ def set_invalid_border(canvas, width, height):
 # Function that seets the valid move border flag
 def set_valid():
     global valid_border
-    with valid_lock:
+    with valid_b_lock:
         valid_border = True
 
 # Function that clears the valid move border flag
 def clear_valid():
     global valid_border
-    with valid_lock:
+    with valid_b_lock:
         valid_border = False
 
 # Function that draws the valid move border
