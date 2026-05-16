@@ -562,6 +562,8 @@ def rotate_tile():
 
     # find the tile at (x, y)
     board = game_state.board
+    print(f" board state: {game_state.board}")
+
     array_row, array_col = game_state.to_array_index(x, y) # convert to array indices
     tile = board[array_row][array_col]
 
@@ -594,7 +596,6 @@ def rotate_tile():
         "old_tile_id": current_tile,
         "new_tile_id": new_tile_id
     }), 200
-
 
 @app.route('/meeple', methods=['POST'])
 def place_meeple():

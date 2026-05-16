@@ -136,11 +136,11 @@ export async function setMeeple(row, col, side) {
   return data;
 }
 
-export async function rotateTile(row, col) {
+export async function rotateTile(col, row) {
   const res = await fetch(`${BASE_URL}/rotate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ x: row, y: col }),
+    body: JSON.stringify({ x: col, y: row }),
   });
   if (!res.ok) {
     const err = await res.json();

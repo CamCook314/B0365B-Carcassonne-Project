@@ -55,7 +55,7 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
   const handleContextMenu = (tile, event) => { 
     event.preventDefault(); // prevent default right-click menu
     console.log("Right-clicked tile:", tile);
-    const rotateLog = rotateTile(tile.row, tile.col)
+    const rotateLog = rotateTile(tile.col, tile.row)
       .then(updatedTile => {
         console.log("Tile rotated:", updatedTile);
       })
