@@ -1,18 +1,31 @@
-export default function ActiveEvents({ events, players }) {
+export default function ActiveEvents({
+  events,
+  players,
+  eventsUnlocked = true,
+  riverTilesPlaced = 0,
+}) {
   const list = events || [];
+  const showLockMessage = !eventsUnlocked && list.length === 0;
+  const showEmptyMessage = eventsUnlocked && list.length === 0;
 
   return (
     <div className="card card-events">
       <div className="card-header">
         <span>Active Events</span>
-        <span className="card-tag">{list.length}</span>
+        <span className="card-tag">{eventsUnlocked ? list.length : "locked"}</span>
       </div>
       <div className="card-body">
-        {list.length === 0 ? (
+        {showLockMessage && (
+          <p style={{ fontSize: 12, color: "var(--dim)" }}>
+            Events locked: {riverTilesPlaced}/12 river tiles placed. Events activate once the river is complete.
+          </p>
+        )}
+        {showEmptyMessage && (
           <p style={{ fontSize: 12, color: "var(--dim)" }}>
             No active events.
           </p>
-        ) : (
+        )}
+        {list.length > 0 && (
           <ul className="events-list">
             {list.map((ev, i) => {
               let appliedTo = null;

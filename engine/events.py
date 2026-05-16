@@ -43,33 +43,53 @@ class Event:
         self.turn = game.current_turn
         self.active = True
         projector.add_img("VOLCANO", (self.coords[0], self.coords[1]))
-        
 
-    def check_volcano(self, game): # runs every turn
-        all_neighbors = [
-					(self.coords[0] - 1, self.coords[1] - 1), (self.coords[0] - 1, self.coords[1]), (self.coords[0]- 1, self.coords[1] + 1),
-					(self.coords[0],   self.coords[1] - 1), (self.coords[0],   self.coords[1]), (self.coords[0],   self.coords[1] + 1),
-					(self.coords[0] + 1, self.coords[1] - 1), (self.coords[0] + 1, self.coords[1]), (self.coords[0] + 1, self.coords[1] + 1)]
-        if game.turnNum >= self.start_turn + 8: #change this for more or less turns
-            for nr, nc in all_neighbors:
+
+    def volcano_check(self, game): # runs every turn
+        if game.current_turn < self.turn + 8: #change this for more or less turns
+            return
+
+        arr_r, arr_c = game.to_array_index(self.coords[0], self.coords[1])
+        fully_surrounded = True
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                if dr == 0 and dc == 0:
+                    continue
+                nr, nc = arr_r + dr, arr_c + dc
+                if nr < 0 or nr >= len(game.board):
+                    fully_surrounded = False
+                    break
+                if nc < 0 or nc >= len(game.board[0]):
+                    fully_surrounded = False
+                    break
                 if game.board[nr][nc] is None:
-                    for i in game.structures: #destroy if finds empty neighbour
-                        i.players = [] #empty players list
-                    for j in game.players:
-                        j.meeples = 7 #reset everybodys meeple counts
-                    self.active = False
+                    fully_surrounded = False
+                    break
+            if not fully_surrounded:
+                break
+
+        if not fully_surrounded:
+            for i in game.structures: #destroy if finds empty neighbour
+                i.players = [] #empty players list
+            for j in game.players:
+                j.meeples = 7 #reset everybodys meeple counts
+
+        self.active = False
+        projector.del_img("VOLCANO", (self.coords[0], self.coords[1]))
 
     def unrest_event(self, game): #all cities score half points for next 4 turns
         self.name = "unrest"
         self.turn = game.current_turn
         self.active = True
-        game.unrest_check = True
+        game.unrestCheck = True
         projector.add_img("UNREST", (self.coords[0], self.coords[1]))
 
-    
-    def check_unrest(self, game):
-        if game.turnNum >= self.start_turn + 4: # change this to chance turns
+
+    def unrest_check(self, game):
+        if game.current_turn >= self.turn + 4: # change this to chance turns
             game.unrestCheck = False
+            self.active = False
+            projector.del_img("UNREST", (self.coords[0], self.coords[1]))
 
     def __repr__(self):
         return f"Event {self.name} placed at {self.coords}"

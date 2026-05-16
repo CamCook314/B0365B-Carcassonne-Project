@@ -17,6 +17,8 @@ export default function Grid({
   pendingTileList,
   pendingPlacement,
   activeEvents,
+  eventsUnlocked,
+  riverTilesPlaced,
   refresh,
   history
 }) {
@@ -83,7 +85,12 @@ export default function Grid({
       </div>
 
       {/* Active Events */}
-      <ActiveEvents events={activeEvents} players={players} />
+      <ActiveEvents
+        events={activeEvents}
+        players={players}
+        eventsUnlocked={eventsUnlocked}
+        riverTilesPlaced={riverTilesPlaced}
+      />
     </div>
   </div>;
 }

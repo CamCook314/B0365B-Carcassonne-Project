@@ -339,15 +339,17 @@ class gameStateClass:
 
 
 	def next_player(self):
-		
+
 		if self.extra_turn:
 			self.extra_turn = False
 			return
+		self.currentIndex = (self.currentIndex + 1) % len(self.players)
+		self.current_turn += 1
 		for ev in self.event_pool: #check events every turn
 			if ev.name == "volcano" and ev.active == True:
 				ev.volcano_check(self)
-		self.currentIndex = (self.currentIndex + 1) % len(self.players)
-		self.current_turn += 1
+			if ev.name == "unrest" and ev.active == True:
+				ev.unrest_check(self)
 
 	def current_player(self):
 		return self.players[self.currentIndex]
