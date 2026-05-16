@@ -45,6 +45,10 @@ export function useGameState(playSound = null) {
             break;
           }
         }
+        // check if game has ended
+        if (!previousGameStateRef.current.game_over && data.game_over) {
+          playSound('gameEnd');
+        }
       }
 
       if (data.notification) {
