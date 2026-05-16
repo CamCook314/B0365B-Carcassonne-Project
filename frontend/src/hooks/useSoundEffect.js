@@ -13,7 +13,7 @@ export const useSoundEffect = () => {
             event2     : '/sounds/event2.ogg',
             gameEnd    : '/sounds/game_end.ogg',
             // score    : '/sounds/score.ogg', tba
-            // turnChange : '/sounds/turn_change.ogg', tba
+            changeTurn : '/sounds/drum.ogg'
         };
 
         // Preload sounds
@@ -33,7 +33,7 @@ export const useSoundEffect = () => {
         };
     }, []);
 
-    const play = useCallback((soundName, volume = 0.5) => {
+    const play = useCallback((soundName, volume = 0.2) => {
         console.log(`Playing sound: ${soundName} at volume: ${volume}`);
         const sound = sounds.current[soundName];
         if (sound) {
