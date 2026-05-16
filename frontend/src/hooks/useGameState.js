@@ -36,9 +36,16 @@ export function useGameState(playSound = null) {
         if (newMeeples.length > prevMeeples.length) {
           playSound('placeMeeple');
         }
+        // check if player has gained score (by comparing player scores)
+        const prevPlayers = previousGameStateRef.current.players || [];
+        const newPlayers = data.players || [];
+        for (let i = 0; i < newPlayers.length; i++) {
+          if (newPlayers[i].score > (prevPlayers[i]?.score || 0)) {
+            playSound('score');
+            break;
+          }
+        }
       }
-      
-      
 
       if (data.notification) {
         clearNotification().catch(() => {});

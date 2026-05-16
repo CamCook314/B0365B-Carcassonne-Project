@@ -12,7 +12,7 @@ export const useSoundEffect = () => {
             event1     : '/sounds/event1.ogg',
             event2     : '/sounds/event2.ogg',
             gameEnd    : '/sounds/game_end.ogg',
-            // score    : '/sounds/score.ogg', tba
+            score      : '/sounds/KSHMR Synth Shot 03 - (A).wav',
             changeTurn : '/sounds/drum.ogg'
         };
 
