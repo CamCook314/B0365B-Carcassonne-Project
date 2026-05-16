@@ -213,6 +213,9 @@ def get_gamestate():
             "valid_sides": valid_sides,
         }
 
+    river_tiles_placed = len(getattr(game_state, "river_struct", []))
+    events_unlocked = river_tiles_placed >= 12
+
     return jsonify({
         "board": board_serialised,
         "players": players_serialised,
@@ -226,6 +229,8 @@ def get_gamestate():
         "game_over": game_over,
         "active_events": build_active_events(game_state),
         "notification": pending_notification,
+        "river_tiles_placed": river_tiles_placed,
+        "events_unlocked": events_unlocked,
     })
 
 

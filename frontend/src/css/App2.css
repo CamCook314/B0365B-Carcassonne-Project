@@ -247,12 +247,13 @@ body {
   gap: 1.5rem;
 }
 
-.end-screen h1 { 
+.end-screen h1 {
   font-size: 3.5rem;
+  color: var(--text);
 }
-.end-screen h2 { 
+.end-screen h2 {
   font-size: 1.8rem;
-  color: var(--dim); 
+  color: var(--text);
 }
 
 .scoreboard {
@@ -260,6 +261,7 @@ body {
   background: var(--card);
   border-radius: 8px;
   overflow: hidden;
+  color: var(--text);
 }
 
 .scoreboard th,
@@ -268,12 +270,14 @@ body {
   text-align: center;
   border-bottom: 1px solid var(--border);
   font-size: 16px;
+  color: var(--text);
 }
 
-.scoreboard th { 
-  background: var(--card-alt); 
+.scoreboard th {
+  background: var(--card-alt);
   font-weight: 600;
   font-size: 17px;
+  color: var(--text);
 }
 .scoreboard tr:last-child td { border-bottom: none; }
 

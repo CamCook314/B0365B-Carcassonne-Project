@@ -67,6 +67,9 @@ export default function App2() {
 
   // Active events (extra turn, volcano, unrest) for the events panel
   const activeEvents = gameState?.active_events || [];
+  // Events stay locked until all 12 river tiles are placed.
+  const eventsUnlocked = gameState?.events_unlocked || false;
+  const riverTilesPlaced = gameState?.river_tiles_placed || 0;
 
   if (!loading && !gameState) {
     return <EntryScreen error={error} handleStart={handleStart} />;
@@ -100,6 +103,8 @@ export default function App2() {
         pendingTileList={pendingTileList}
         pendingPlacement={pendingPlacement}
         activeEvents={activeEvents}
+        eventsUnlocked={eventsUnlocked}
+        riverTilesPlaced={riverTilesPlaced}
         history={history}
         refresh={async () => {
           await immediateFetch();
