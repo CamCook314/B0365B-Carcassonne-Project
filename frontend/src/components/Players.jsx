@@ -1,6 +1,50 @@
+import { useState } from 'react';
+import Swal from 'sweetalert2';
 import { PLAYER_COLOURS } from "../constants/config";
+import { endGame } from '../api/api.js';
 
-export default function Players({ currentPlayer, players }) {
+export default function Players({ currentPlayer, players, refresh }) {
+  const [ending, setEnding] = useState(false);
+
+  const handleEndGame = async () => {
+    const confirm = await Swal.fire({
+      title: 'End Game?',
+      text: 'Are you sure you want to end the game? This cannot be undone.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'End Game',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#BF616A',
+      cancelButtonColor: '#888'
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      setEnding(true);
+      const result = await endGame();
+      // TODO: calculate scores from leftover structures
+      // Find winner based on highest score
+      const scores = result.scores;
+      const winner = scores.reduce((max, current) => 
+        current.score > max.score ? current : max
+      );
+
+      // Refresh game state to show end screen
+      if (refresh) {
+        await refresh();
+      }
+    } catch (err) {
+      Swal.fire({
+        title: 'Error',
+        text: err.message,
+        icon: 'error'
+      });
+    } finally {
+      setEnding(false);
+    }
+  };
+
   return <div className="card card-players">
     <div className="card-header">
       <span>Players</span>
@@ -39,6 +83,23 @@ export default function Players({ currentPlayer, players }) {
           </div>
         </div>
       ))}
+      <button 
+        onClick={handleEndGame}
+        disabled={ending}
+        style={{
+          marginTop: '15px',
+          padding: '8px 12px',
+          width: '100%',
+          backgroundColor: '#BF616A',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          fontSize: '14px',
+          fontWeight: 'bold'
+        }}
+      >
+        End Game
+      </button>
     </div>
   </div>;
 }

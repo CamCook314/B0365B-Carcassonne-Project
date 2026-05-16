@@ -160,6 +160,17 @@ export async function clearNotification() {
   return res.json();
 }
 
+export async function endGame() {
+  const res = await fetch(`${BASE_URL}/end`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to end game");
+  }
+  const data = await res.json();
+  addToHistory("/end", data);
+  return data;
+}
+
 export async function resetGame() {
   const res = await fetch(`${BASE_URL}/reset`, { method: "POST" });
   if (!res.ok) {

@@ -23,7 +23,7 @@ export default function Grid({
   return <div className="grid">
     <div className="col">
       {/* Players */}
-      <Players currentPlayer={currentPlayer} players={players} />
+      <Players currentPlayer={currentPlayer} players={players} refresh={refresh} />
 
       {/* Meeple Placer */}
       <MeeplePlacer
