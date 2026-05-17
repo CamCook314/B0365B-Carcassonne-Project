@@ -74,7 +74,7 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
       </div>
 
       <div className="board-wrap">
-        <TransformWrapper initialScale={1} minScale={0.2} maxScale={4} centerOnInit wheel={{ step: 0.08 }} panning={{ velocityDisabled: true }}>
+        <TransformWrapper initialScale={1.5} minScale={1} maxScale={3} centerOnInit wheel={{ step: 0.01 }} panning={{ velocityDisabled: true }}>
           {({ zoomIn, zoomOut, resetTransform }) => (
             <>
               <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width, height, position: "relative" }}>

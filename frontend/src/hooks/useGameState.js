@@ -49,6 +49,11 @@ export function useGameState(playSound = null) {
         if (!previousGameStateRef.current.game_over && data.game_over) {
           playSound('gameEnd');
         }
+
+        // check if any tile has been detected by CV to show player that their tile is ready
+        if (previousGameStateRef.current.remaining_pieces > data.remaining_pieces) {
+          // TODO playSound()
+        }
       }
 
       if (data.notification) {
