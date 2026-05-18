@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export const useSoundEffect = () => {
     const sounds = useRef({});
+    const [isMuted, setIsMuted] = useState(false);
     
 
     useEffect(() => {
@@ -35,6 +36,7 @@ export const useSoundEffect = () => {
     }, []);
 
     const play = useCallback((soundName, volume = 0.2) => {
+        if (isMuted) return;
         console.log(`Playing sound: ${soundName} at volume: ${volume}`);
         const sound = sounds.current[soundName];
         if (sound) {
@@ -43,7 +45,11 @@ export const useSoundEffect = () => {
             soundClone.volume = volume;
             soundClone.play();
         }
+    }, [isMuted]);
+
+    const toggleMute = useCallback(() => {
+        setIsMuted(prev => !prev);
     }, []);
 
-    return { play };
+    return { play, isMuted, toggleMute };
 };
