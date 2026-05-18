@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Swal from 'sweetalert2';
 import { PLAYER_COLOURS } from "../constants/config";
 import { endGame } from '../api/api.js';
+import { convertPlayerToColourMeeple } from './ActivityLog.jsx'
 
 export default function Players({ currentPlayer, players, refresh }) {
   const [ending, setEnding] = useState(false);
@@ -72,7 +73,7 @@ export default function Players({ currentPlayer, players, refresh }) {
               <p style={{ padding: 0, margin: 0 }}>{p.colour || `Player ${i + 1}`}</p>
             </div>
             {/* show how many of the 7 meeples are still available */}
-            <div className="player-detail">{p.meeples}/7 meeples</div>
+            <Meeples meeples={p.meeples} currentPlayer={i} />
           </div>
           <div
             className="player-score"
@@ -101,5 +102,18 @@ export default function Players({ currentPlayer, players, refresh }) {
         End Game
       </button>
     </div>
+  </div>;
+}
+
+function Meeples({ meeples, currentPlayer }) {
+  // show number of meeple icons based on remaining meeples
+  const meepleIcons = [];
+  const meepleIcon = convertPlayerToColourMeeple(currentPlayer);
+  for (let i = 0; i < meeples; i++) {
+    meepleIcons.push(meepleIcon);
+  }
+
+  return <div className="meeple-icons" style={{ fontSize: "10px" }}>
+    {meepleIcons.join(" ")}
   </div>;
 }
