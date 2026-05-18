@@ -1,4 +1,10 @@
-const BASE_URL = "http://127.0.0.1:1234";
+// Use the same hostname the browser used to load the page so LAN clients
+// don't try to fetch their own loopback. Falls back to 127.0.0.1 in
+// non-browser environments (tests, SSR).
+const HOST = (typeof window !== "undefined" && window.location && window.location.hostname)
+  ? window.location.hostname
+  : "127.0.0.1";
+const BASE_URL = `http://${HOST}:1234`;
 
 let history = [];
 let lastState = null;

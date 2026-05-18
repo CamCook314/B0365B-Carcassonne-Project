@@ -271,7 +271,7 @@ def _handle_meeple_skip():
 def _run_api():
     import logging
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    engine_api.app.run(host="127.0.0.1", port=1234, debug=False, use_reloader=False)
+    engine_api.app.run(host="0.0.0.0", port=1234, debug=False, use_reloader=False)
 
 
 def _run_cv():
