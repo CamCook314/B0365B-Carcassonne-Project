@@ -666,6 +666,12 @@ class structures:
 			if len(self.players) == 0:
 				return
 			self.players[0].score += 9
+			self.players[0].meeples += 1
+			for entry in self.tiles_used:
+				t = entry[0] if isinstance(entry, tuple) else entry
+				if getattr(t, 'meeple_attached', None):
+					t.meeple_attached = False
+					t.meeple_player_index = None
 			return
 
 		temp_score = 0
@@ -694,7 +700,13 @@ class structures:
 		for player in self.players:
 			player.score += temp_score
 			player.ability(self, game)
-		pass
+			player.meeples += 1
+
+		for entry in self.tiles_used:
+			t = entry[0] if isinstance(entry, tuple) else entry
+			if getattr(t, 'meeple_attached', None):
+				t.meeple_attached = False
+				t.meeple_player_index = None
 
 	def check_completed(self, board):
 		"""
