@@ -77,7 +77,7 @@ function convertPlayerToColour(playerIndex) {
     }
 }
 
-function convertPlayerToColourMeeple(playerIndex) {
+export function convertPlayerToColourMeeple(playerIndex) {
     switch (playerIndex) {
         case 0:
             return "🔴"

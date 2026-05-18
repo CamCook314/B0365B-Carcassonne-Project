@@ -11,7 +11,7 @@ import Grid from "./Grid";
 import Header from "./Header";
 
 export default function App2() {
-  const { play } = useSoundEffect();
+  const { play, isMuted, toggleMute } = useSoundEffect();
   const { gameState, loading, error, setError, retry: fetchState, immediateFetch, history } = useGameState(play);
   
 
@@ -89,7 +89,7 @@ export default function App2() {
   return (
     <div className="app">
       {/* Header */}
-      <Header currentTurn={currentTurn} boardTiles={boardTiles} remaining={remaining} />
+      <Header currentTurn={currentTurn} boardTiles={boardTiles} remaining={remaining} isMuted={isMuted} toggleMute={toggleMute} />
 
       <Grid
         currentPlayer={currentPlayer}
