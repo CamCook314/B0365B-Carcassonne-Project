@@ -17,3 +17,6 @@ screeninfo
 flask
 flask-cors
 requests
+dinov2
+sweetify
+transformers
