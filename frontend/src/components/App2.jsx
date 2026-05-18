@@ -4,7 +4,7 @@ import { POLLING_INTERVAL } from "../constants/config";
 import { useGameState } from "../hooks/useGameState";
 import { useSoundEffect } from "../hooks/useSoundEffect";
 import "../css/App2.css";
-import EntryScreen from "./EntryScreen";
+import LandingPage from "./LandingPage";
 import LoadingScreen from "./LoadingScreen";
 import EndScreen from "./EndScreen";
 import Grid from "./Grid";
@@ -72,7 +72,7 @@ export default function App2() {
   const riverTilesPlaced = gameState?.river_tiles_placed || 0;
 
   if (!loading && !gameState) {
-    return <EntryScreen error={error} handleStart={handleStart} />;
+    return <LandingPage error={error} handleStart={handleStart} />;
   }
 
   // loading
