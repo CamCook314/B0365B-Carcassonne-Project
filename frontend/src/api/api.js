@@ -136,11 +136,11 @@ export async function setMeeple(row, col, side) {
   return data;
 }
 
-export async function rotateTile(row, col) {
+export async function rotateTile(col, row) {
   const res = await fetch(`${BASE_URL}/rotate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ x: row, y: col }),
+    body: JSON.stringify({ x: col, y: row }),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -158,6 +158,17 @@ export async function clearNotification() {
     throw new Error(err.error || "Failed to clear notification");
   }
   return res.json();
+}
+
+export async function endGame() {
+  const res = await fetch(`${BASE_URL}/end`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to end game");
+  }
+  const data = await res.json();
+  addToHistory("/end", data);
+  return data;
 }
 
 export async function resetGame() {

@@ -1,5 +1,20 @@
 import { resetGame } from "../api/api";
 
+// Map server-side colour names to the readable hex from PLAYER_COLOURS in
+// constants/config.js. CSS named colours like "blue" and "black" are too
+// dark against the navy background.
+const COLOUR_HEX = {
+  red:    "#BF616A",
+  blue:   "#81A1C1",
+  green:  "#A3BE8C",
+  yellow: "#EBCB8B",
+  black:  "#4C566A",
+};
+
+function colourFor(name) {
+  return COLOUR_HEX[name] || "var(--text)";
+}
+
 export default function EndScreen({ players, onReset }) {
   const ranked = [...players].sort((a, b) => b.score - a.score);
   const topScore = ranked[0]?.score ?? 0;
@@ -20,11 +35,11 @@ export default function EndScreen({ players, onReset }) {
 
       {winners.length === 1 ? (
         <h2>
-          Winner: <span style={{ color: winners[0].colour }}>{winners[0].colour}</span> — {topScore} points
+          Winner: <span style={{ color: colourFor(winners[0].colour) }}>{winners[0].colour}</span>, {topScore} points
         </h2>
       ) : (
         <h2>
-          Tie between {winners.map((w) => w.colour).join(", ")} — {topScore} points
+          Tie between {winners.map((w) => w.colour).join(", ")}, {topScore} points
         </h2>
       )}
 
@@ -41,7 +56,7 @@ export default function EndScreen({ players, onReset }) {
           {ranked.map((p, i) => (
             <tr key={p.colour}>
               <td>{i + 1}</td>
-              <td style={{ color: p.colour }}>{p.colour}</td>
+              <td style={{ color: colourFor(p.colour) }}>{p.colour}</td>
               <td>{p.score}</td>
               <td>{p.meeples}</td>
             </tr>

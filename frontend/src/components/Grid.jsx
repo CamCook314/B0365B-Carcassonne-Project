@@ -17,13 +17,15 @@ export default function Grid({
   pendingTileList,
   pendingPlacement,
   activeEvents,
+  eventsUnlocked,
+  riverTilesPlaced,
   refresh,
   history
 }) {
   return <div className="grid">
     <div className="col">
       {/* Players */}
-      <Players currentPlayer={currentPlayer} players={players} />
+      <Players currentPlayer={currentPlayer} players={players} refresh={refresh} />
 
       {/* Meeple Placer */}
       <MeeplePlacer
@@ -83,7 +85,12 @@ export default function Grid({
       </div>
 
       {/* Active Events */}
-      <ActiveEvents events={activeEvents} players={players} />
+      <ActiveEvents
+        events={activeEvents}
+        players={players}
+        eventsUnlocked={eventsUnlocked}
+        riverTilesPlaced={riverTilesPlaced}
+      />
     </div>
   </div>;
 }

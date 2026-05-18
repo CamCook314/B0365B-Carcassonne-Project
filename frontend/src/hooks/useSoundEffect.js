@@ -6,14 +6,15 @@ export const useSoundEffect = () => {
 
     useEffect(() => {
         const soundFiles = {
-            gameStart  : '/sounds/game_start.ogg',
-            placeTile  : '/sounds/place_tile.ogg',
-            placeMeeple: '/sounds/place_meeple.ogg',
-            event1     : '/sounds/event1.ogg',
-            event2     : '/sounds/event2.ogg',
-            gameEnd    : '/sounds/game_end.ogg',
-            // score    : '/sounds/score.ogg', tba
-            // turnChange : '/sounds/turn_change.ogg', tba
+            gameStart    : '/sounds/game_start.ogg',
+            placeTile    : '/sounds/place_tile.ogg',
+            placeMeeple  : '/sounds/place_meeple.ogg',
+            event1       : '/sounds/event1.ogg',
+            event2       : '/sounds/event2.ogg',
+            gameEnd      : '/sounds/game_end.ogg',
+            score        : '/sounds/KSHMR Synth Shot 03 - (A).wav',
+            changeTurn   : '/sounds/drum.ogg',
+            detectedTile : '/sounds/KSHMR Synth Shot 10 - (C).wav'
         };
 
         // Preload sounds
@@ -33,7 +34,7 @@ export const useSoundEffect = () => {
         };
     }, []);
 
-    const play = useCallback((soundName, volume = 0.5) => {
+    const play = useCallback((soundName, volume = 0.2) => {
         console.log(`Playing sound: ${soundName} at volume: ${volume}`);
         const sound = sounds.current[soundName];
         if (sound) {

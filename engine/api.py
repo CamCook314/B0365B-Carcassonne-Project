@@ -213,6 +213,9 @@ def get_gamestate():
             "valid_sides": valid_sides,
         }
 
+    river_tiles_placed = len(getattr(game_state, "river_struct", []))
+    events_unlocked = river_tiles_placed >= 12
+
     return jsonify({
         "board": board_serialised,
         "players": players_serialised,
@@ -226,6 +229,8 @@ def get_gamestate():
         "game_over": game_over,
         "active_events": build_active_events(game_state),
         "notification": pending_notification,
+        "river_tiles_placed": river_tiles_placed,
+        "events_unlocked": events_unlocked,
     })
 
 
@@ -562,6 +567,8 @@ def rotate_tile():
 
     # find the tile at (x, y)
     board = game_state.board
+    print(f" board state: {game_state.board}")
+
     array_row, array_col = game_state.to_array_index(x, y) # convert to array indices
     tile = board[array_row][array_col]
 
@@ -594,7 +601,6 @@ def rotate_tile():
         "old_tile_id": current_tile,
         "new_tile_id": new_tile_id
     }), 200
-
 
 @app.route('/meeple', methods=['POST'])
 def place_meeple():

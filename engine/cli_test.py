@@ -10,29 +10,31 @@ time to render between steps.
 Game shape (mimics the start of a real Carcassonne game with the River
 expansion fully placed before regular play):
 
-  Turns 1-9   River expansion. 9 tiles laid as an S-curve from the top-left
-              source-cap east → south → east → south to a second source-cap.
-              Players rotate (red, blue, green) but no meeples are placed —
-              river tiles have no roads or cities to claim.
+  Turns 1-12  River expansion. 12 tiles laid in a winding path from the
+              top-left source-cap at (0,0) east → south → east → south to
+              (4,-4), then east again to a second source-cap at (7,-4).
+              Reaching exactly 12 river tiles is what triggers
+              gameStateClass.event_init() in data.py, which seeds the
+              4 random events into game.event_pool.
 
-  Turns 10-13 GREEN's 4-tile completed city along y=1 (above the river start).
-              Green meeples on turn 12; turn 13 caps the right end and the
+  Turns 13-16 GREEN's 4-tile completed city along y=1 (above the river start).
+              Green meeples on turn 15; turn 16 caps the right end and the
               city completes mid-game → +8 to green via score_structure().
 
-  Turns 14-15 BLUE's 2-tile completed road at (5,-2)-(5,-3). Blue claims it
-              on turn 14, green caps it on turn 15 → +2 to blue mid-game.
+  Turns 17-18 BLUE's 2-tile completed road at (5,-2)-(5,-3). Blue claims it
+              on turn 17, green caps it on turn 18 → +2 to blue mid-game.
 
-  Turns 16-17 RED's 2-tile completed road at (3,0)-(4,0). Red claims it on
-              turn 16, blue caps it on turn 17 → +2 to red mid-game.
+  Turns 19-20 RED's 2-tile completed road at (3,0)-(4,0). Red claims it on
+              turn 19, blue caps it on turn 20 → +2 to red mid-game.
 
-  Turns 18-19 Filler: a stand-alone monastery and a stray road dead-end.
+  Turns 21-22 Filler: a stand-alone monastery and a stray road dead-end.
 
-  Turns 20-21 BLUE's incomplete 2-tile city at (-1,0)-(-1,1). Blue claims it
-              on turn 20; green extends with a cap-down on turn 21. The city
+  Turns 23-24 BLUE's incomplete 2-tile city at (-1,0)-(-1,1). Blue claims it
+              on turn 23; green extends with a cap-down on turn 24. The city
               still has one open edge → stays in self.structures until /end,
               then score_end_game() awards 2 partial points (1 per tile).
 
-  Turns 22-30 More tile placements to fill the board: three additional
+  Turns 25-33 More tile placements to fill the board: three additional
               monasteries (no claims), a road tile, a road cap that joins
               with another road tile, etc. None of these add player score —
               they're just to make the board feel populated like a real game.
@@ -53,40 +55,45 @@ DELAY = 1.0   # seconds between actions
 # meeple_direction=None  → /meeple/skip
 # rotation_id=None       → let the API pick the first valid rotation at (x,y)
 TURNS = [
-    # ── River expansion (turns 1-9, no meeples) ──────────────────────────────
-    ("red",   "ID0",   0,  0, None,    None),     # source cap (right)
-    ("blue",  "ID9",   1,  0, None,    None),     # straight L+R
-    ("green", "ID32",  2,  0, None,    None),     # corner L→down
-    ("red",   "ID8",   2, -1, None,    None),     # straight U+D
-    ("blue",  "ID40",  2, -2, None,    None),     # corner U→right
-    ("green", "ID13",  3, -2, None,    None),     # straight L+R
-    ("red",   "ID42",  4, -2, None,    "ID42"),   # corner L→down (default would pick ID41=U+L)
-    ("blue",  "ID10",  4, -3, None,    "ID10"),   # straight U+D (force fresh tile object)
-    ("green", "ID1",   4, -4, None,    None),     # bottom source cap (up)
+    # ── River expansion (turns 1-12, no meeples) ─────────────────────────────
+    # 12 river tiles total. Reaching 12 is the trigger for event_init() in
+    # data.py, which seeds the random events into game.event_pool.
+    ("red",   "ID0",   0,  0, None,    None),     # T1  source cap (right)
+    ("blue",  "ID9",   1,  0, None,    None),     # T2  straight L+R
+    ("green", "ID32",  2,  0, None,    None),     # T3  corner L→down
+    ("red",   "ID8",   2, -1, None,    None),     # T4  straight U+D
+    ("blue",  "ID40",  2, -2, None,    None),     # T5  corner U→right
+    ("green", "ID13",  3, -2, None,    None),     # T6  straight L+R
+    ("red",   "ID42",  4, -2, None,    "ID42"),   # T7  corner L→down (default would pick ID41=U+L)
+    ("blue",  "ID10",  4, -3, None,    "ID10"),   # T8  straight U+D (force fresh tile object)
+    ("green", "ID32",  4, -4, None,    "ID34"),   # T9  corner U→right (force fresh tile object)
+    ("red",   "ID8",   5, -4, None,    "ID11"),   # T10 straight L+R (force fresh tile object)
+    ("blue",  "ID12",  6, -4, None,    "ID15"),   # T11 straight L+R (force fresh tile object)
+    ("green", "ID0",   7, -4, None,    "ID2"),    # T12 left-cap source → triggers event_init()
 
-    # ── Green's 4-tile completed city (turns 10-13) ──────────────────────────
+    # ── Green's 4-tile completed city (turns 13-16) ──────────────────────────
     ("red",   "ID92",  0,  1, None,    None),     # cap-left, skip
     ("blue",  "ID233", 1,  1, None,    None),     # mid #1, skip
     ("green", "ID232", 2,  1, "right", "ID235"),  # mid #2 (forced) — green claims city
     ("red",   "ID94",  3,  1, None,    None),     # cap-right → city completes → +8 green
 
-    # ── Blue's 2-tile completed road (turns 14-15) ───────────────────────────
+    # ── Blue's 2-tile completed road (turns 17-18) ───────────────────────────
     ("blue",  "ID122", 5, -2, "down",  None),     # blue claims road dead-end
     ("green", "ID122", 5, -3, None,    "ID123"),  # green caps it → +2 blue
 
-    # ── Red's 2-tile completed road (turns 16-17) ────────────────────────────
+    # ── Red's 2-tile completed road (turns 19-20) ────────────────────────────
     ("red",   "ID122", 3,  0, "right", "ID122"),  # red claims road dead-end
     ("blue",  "ID122", 4,  0, None,    "ID120"),  # blue caps it → +2 red
 
-    # ── Filler (turns 18-19) ────────────────────────────────────────────────
+    # ── Filler (turns 21-22) ────────────────────────────────────────────────
     ("green", "ID88",  4,  1, None,    None),     # monastery, no meeple (engine bug)
     ("red",   "ID132", 5,  1, None,    "ID133"),  # stray road-down dead-end
 
-    # ── Blue's incomplete 2-tile city (turns 20-21) ─────────────────────────
+    # ── Blue's incomplete 2-tile city (turns 23-24) ─────────────────────────
     ("blue",  "ID232", -1, 0, "up",    "ID232"),  # blue claims a fresh city
     ("green", "ID92", -1,  1, None,    "ID95"),   # extend with cap-down (closes one edge)
 
-    # ── Board-filling turns (22-30) ──────────────────────────────────────────
+    # ── Board-filling turns (25-33) ──────────────────────────────────────────
     ("red",   "ID88",  1,  2, None,    "ID89"),   # monastery
     ("blue",  "ID88",  2,  2, None,    "ID90"),   # monastery
     ("green", "ID88",  3,  2, None,    "ID91"),   # monastery
@@ -95,7 +102,10 @@ TURNS = [
     ("green", "ID132", 2, -3, None,    "ID134"),  # road right tile
     ("red",   "ID64",  3, -3, None,    None),     # ID67 picked: connects via road into ID134
     ("blue",  "ID132", 5, -1, None,    "ID135"),  # stray road-up dead-end
-    ("green", "ID0",   1, -1, None,    "ID2"),    # river-left only (decorative)
+    # River is fully closed by turn 12, so no further river-edged tiles can be
+    # placed (the new river-continuity check rejects dangling river edges).
+    # Drop a single-edge road tile in an empty spot instead, just to fill turn 33.
+    ("green", "ID120", 4,  2, None,    "ID122"),   # road-right dead-end at (4,2)
 ]
 
 
