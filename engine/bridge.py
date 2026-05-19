@@ -57,14 +57,16 @@ def _sync_projector_calibration():
         return  # already up to date
     scale_x = projector.proj_w / _CV_PROC_W
     scale_y = projector.proj_h / _CV_PROC_H
-    proj_origin      = (round(origin[0] * scale_x), round(origin[1] * scale_y))
+    # Origin: player places the first tile on the startup cross, so the projector
+    # screen centre IS the physical origin — no estimation or offset needed.
+    proj_origin      = (projector.proj_w // 2, projector.proj_h // 2)
     proj_tile_size   = round(tile_size * scale_x)   # X spacing
     proj_tile_size_y = round(tile_size * scale_y)   # Y spacing (projector is 16:10, camera is 16:9)
     projector.set_proj_calibration(origin=proj_origin, tile_size=proj_tile_size,
                                    tile_size_y=proj_tile_size_y, angle_deg=angle)
     _last_proj_tile_size = tile_size
     _last_proj_angle     = angle
-    print(f"[bridge] Projector calibration updated — origin={proj_origin}"
+    print(f"[bridge] Projector calibration updated — origin={proj_origin} (screen centre)"
           f"  tile_size={proj_tile_size}px (x)  {proj_tile_size_y}px (y)"
           f"  angle={angle:.1f}°")
 
@@ -149,8 +151,8 @@ def _debug_proj_alignment(vp_tuples: list):
     cam_a = ts * math.cos(θ)
     cam_b = ts * math.sin(θ)
     print(f"[proj-align] cam_origin=({ox},{oy})  cam_tile={ts:.1f}px  angle={angle:.1f}°  "
-          f"proj_origin=({pox},{poy})  proj_tile=({projector.proj_tile_size}x,{projector.proj_tile_size_y}y)px  "
-          f"offset=({projector.PROJ_OFFSET_X},{projector.PROJ_OFFSET_Y})")
+          f"proj_origin=({pox},{poy}) [screen-centre]  "
+          f"proj_tile=({projector.proj_tile_size}x,{projector.proj_tile_size_y}y)px")
     for gx, gy in vp_tuples:
         cam_x = round(ox + gx * cam_a + gy * cam_b)
         cam_y = round(oy + gx * cam_b - gy * cam_a)

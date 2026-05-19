@@ -567,7 +567,7 @@ def rotate_tile():
 
     # find the tile at (x, y)
     board = game_state.board
-    print(f" board state: {game_state.board}")
+    #print(f" board state: {game_state.board}")
 
     array_row, array_col = game_state.to_array_index(x, y) # convert to array indices
     tile = board[array_row][array_col]

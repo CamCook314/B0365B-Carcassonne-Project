@@ -18,5 +18,5 @@ flask
 flask-cors
 requests
 dinov2
-sweetify
+sweetalert2
 transformers
