@@ -294,19 +294,5 @@ class empty_bag():
                         if check_right == True:
                             moves[predict_coords].add(tile)
         return moves
-    
-    
-t_bag = tile_bag()
-prediction = t_bag.tile_predict(1, 2, 1, 2)
-print(f"Chance is {prediction[0]} with {prediction[1]} tiles")
 
-bag = empty_bag()
-bag.add_tile("ID0",   (0, 0))
-bag.add_tile("ID7",   (1, 0))
-bag.add_tile("ID65",  (0, 1))
-bag.add_tile("ID105", (0, 2))
-bag.add_tile("ID113", (1, 2))
-bag.add_tile("ID120", (2, 2))
-bag.add_tile("ID128", (2, 1))
-print(bag.predict_move("ID137"))
 
