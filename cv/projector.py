@@ -70,27 +70,36 @@ MARKER_SIZE = round(0.6 * TILE_SIZE)
 EVENT_SIZE  = round(0.6 * TILE_SIZE)
 
 ## PROJECTOR COORDINATE SYSTEM
-# proj_origin: projector pixel (x, y) of grid position (0, 0) — set to screen
-#              centre at startup to match the startup cross, updated by CV once
-#              the grid is established via set_proj_calibration().
-# proj_tile_size: projector pixels per tile — derived from camera tile size × scale.
-# proj_a / proj_b: rotation-aware step vectors for the grid (like grid_tracker.a/b but
-#   scaled to projector pixels). Moving right by 1 grid unit shifts by (+proj_a, +proj_b_y)
-#   and moving up by 1 grid unit shifts by (+proj_b, -proj_a_y).
+# proj_origin: projector pixel (x, y) of grid position (0, 0) — screen centre at startup.
+# proj_tile_size: projector pixels per tile — used as marker size fallback.
+# proj_a / proj_b: rotation-aware step vectors (fallback when H not available).
 proj_origin      = None         # set in projector_main() once resolution is known
 proj_tile_size   = TILE_SIZE    # projector pixels per tile — X axis
-proj_tile_size_y = TILE_SIZE    # projector pixels per tile — Y axis (may differ due to aspect ratio)
-proj_angle_deg   = 0.0          # current board rotation angle in degrees
-proj_a           = float(TILE_SIZE)   # x-step for +1 grid-x  (tile_size_x * cos θ)
-proj_b           = 0.0                # x-step for +1 grid-y  (tile_size_x * sin θ)
-proj_a_y         = float(TILE_SIZE)   # y-step for +1 grid-y  (tile_size_y * cos θ)
-proj_b_y         = 0.0                # y-step for +1 grid-x  (tile_size_y * sin θ)
+proj_tile_size_y = TILE_SIZE    # projector pixels per tile — Y axis
+proj_angle_deg   = 0.0
+proj_a           = float(TILE_SIZE)
+proj_b           = 0.0
+proj_a_y         = float(TILE_SIZE)
+proj_b_y         = 0.0
 
-# Projector resolution — set in projector_main(); read by CV to compute scale factor.
+# Homography: maps camera proc-frame pixels (1920×1080) → projector pixels.
+# Computed once at startup from calibration dots; None until calibration completes.
+# When set, tile_grid_points uses this instead of the linear fallback above.
+_homography:  np.ndarray | None = None
+_cam_origin:  tuple | None      = None   # grid origin in cam proc pixels
+_cam_a:       float | None      = None   # grid_tracker.a (tile_size * cos θ)
+_cam_b:       float | None      = None   # grid_tracker.b (tile_size * sin θ)
+
+# Calibration dot projector positions — 4 bright-green circles drawn during startup
+# at 25%/75% of each axis. Populated in projector_main() once resolution is known.
+calib_dot_proj_pts: list = []
+
+# Projector resolution — set in projector_main(); read by CV/bridge to compute scale.
 proj_w = None
 proj_h = None
 
 def set_proj_calibration(origin=None, tile_size=None, tile_size_y=None, angle_deg=None):
+    """Update the linear-fallback calibration (used when homography is not available)."""
     global proj_origin, proj_tile_size, proj_tile_size_y
     global proj_angle_deg, proj_a, proj_b, proj_a_y, proj_b_y
     if origin is not None:
@@ -108,6 +117,78 @@ def set_proj_calibration(origin=None, tile_size=None, tile_size_y=None, angle_de
     proj_b   = proj_tile_size   * sin_θ
     proj_a_y = proj_tile_size_y * cos_θ
     proj_b_y = proj_tile_size_y * sin_θ
+
+
+def set_homography(H):
+    """Store the camera→projector homography matrix."""
+    global _homography
+    _homography = np.asarray(H, dtype=np.float64).reshape(3, 3)
+    print("[projector] Homography set — using exact cam→proj mapping.")
+
+
+def set_cam_grid(origin, a, b):
+    """Store the camera-space grid parameters used by tile_grid_points with H."""
+    global _cam_origin, _cam_a, _cam_b
+    _cam_origin, _cam_a, _cam_b = origin, float(a), float(b)
+
+
+def cam_to_proj(cam_x: float, cam_y: float) -> tuple:
+    """Map a camera proc-frame pixel to a projector pixel via the homography."""
+    pt = _homography @ np.array([cam_x, cam_y, 1.0], dtype=np.float64)
+    return (int(round(pt[0] / pt[2])), int(round(pt[1] / pt[2])))
+
+
+def proj_tile_size_from_H(cam_origin, cam_a, cam_b) -> int | None:
+    """Compute projector tile size (px) by mapping a unit cam step through H."""
+    if _homography is None or cam_origin is None:
+        return None
+    p0 = cam_to_proj(cam_origin[0], cam_origin[1])
+    p1 = cam_to_proj(cam_origin[0] + cam_a, cam_origin[1] + cam_b)
+    return max(1, int(round(math.hypot(p1[0] - p0[0], p1[1] - p0[1]))))
+
+
+def compute_homography(cam_pts, proj_pts):
+    """Compute H mapping camera proc-frame pixels to projector pixels.
+
+    Sorts both point sets into [TL, TR, BR, BL] order using x+y and x-y, then
+    pairs them directly. This is reliable because cv.flip(frame,-1) gives the
+    camera proc frame the same top-left-origin convention as projector space, so
+    both sets share the same geometric ordering.
+
+    Note: with exactly 4 points, findHomography always gives 0 reprojection
+    error regardless of which correspondence is chosen — cyclic-shift selection
+    by error is therefore blind and unsafe.
+
+    Returns a 3×3 ndarray or None on failure.
+    """
+    def _tl_tr_br_bl(pts):
+        arr = np.array(pts, dtype=np.float32)
+        # Sort by y to split top pair from bottom pair, then by x within each.
+        # More robust than x+y / x-y diagonals for skewed quadrilaterals.
+        by_y = arr[np.argsort(arr[:, 1])]
+        top = by_y[:2][np.argsort(by_y[:2, 0])]  # left=TL, right=TR
+        bot = by_y[2:][np.argsort(by_y[2:, 0])]  # left=BL, right=BR
+        return np.array([top[0], top[1], bot[1], bot[0]],
+                        dtype=np.float32)           # TL, TR, BR, BL
+
+    cam_ordered  = _tl_tr_br_bl(cam_pts)
+    proj_ordered = _tl_tr_br_bl(proj_pts)
+
+    print("[projector] Calibration correspondences:")
+    labels = ["TL", "TR", "BR", "BL"]
+    for lbl, cp, pp in zip(labels, cam_ordered, proj_ordered):
+        print(f"  {lbl}  cam=({cp[0]:.0f},{cp[1]:.0f})  proj=({pp[0]:.0f},{pp[1]:.0f})")
+
+    H, _ = cv.findHomography(cam_ordered, proj_ordered)
+    if H is None:
+        print("[projector] compute_homography: findHomography failed.")
+        return None
+
+    projected = cv.perspectiveTransform(
+        cam_ordered.reshape(-1, 1, 2), H).reshape(-1, 2)
+    err = float(np.mean(np.linalg.norm(projected - proj_ordered, axis=1)))
+    print(f"[projector] Homography computed — reprojection error: {err:.1f}px")
+    return H
 
 ## IMAGE DICTIONARY LOCK
 img_lock = threading.Lock()
@@ -157,28 +238,37 @@ def del_img(img, coord):
 
 ## START UP FUNCTION
 def startup(canvas, centre_x, centre_y):
-    # No tile has been placed yet draw bounding box
-    colour = (0, 255, 255) # YELLOW - CAN BE CHANGED
-    canvas = cv.drawMarker(canvas, (centre_x, centre_y), colour, cv.MARKER_CROSS, 30, 2)
-    text = "Place tile on cross to start"
-    org =(centre_x - 215, centre_y - 30) # Calculate start point based on testing for text
-    font = cv.FONT_HERSHEY_SIMPLEX
-    scale = 1
-    lineType = cv.LINE_AA
-    #canvas = cv.putText(canvas, text, org, font, scale, colour, 2, lineType)
+    if _homography is None and calib_dot_proj_pts:
+        # Calibration phase: show only the 4 green dots so the camera can compute H.
+        # The startup cross is deliberately hidden so the user cannot place a tile yet.
+        for pt in calib_dot_proj_pts:
+            cv.circle(canvas, pt, 25, (0, 255, 0), -1)
+        cv.putText(canvas, "Calibrating projector...",
+                   (centre_x - 200, centre_y), cv.FONT_HERSHEY_SIMPLEX,
+                   1, (0, 255, 0), 2, cv.LINE_AA)
+    else:
+        # H is established (or no dots configured) — show the placement cross.
+        colour = (0, 255, 255)
+        canvas = cv.drawMarker(canvas, (centre_x, centre_y), colour, cv.MARKER_CROSS, 30, 2)
     return canvas
 
 # Function that calculates a given coords tile centre point, and start and end pixel coords.
-# Uses module-level proj_a/proj_b/proj_a_y/proj_b_y step vectors so board rotation is
-# accounted for automatically. grid_tile_size and tile_size_y are kept for API compat.
+# When a homography is available it maps the camera-space grid position exactly to projector
+# pixels; otherwise falls back to the rotation-aware linear formula.
 def tile_grid_points(grid_origin, _grid_tile_size, tile_coord, img_size, _tile_size_y=None):
     gx, gy = tile_coord
-    # Rotation-aware step: matches grid_tracker.grid_to_px but in projector-pixel space.
-    tile_origin_x = round(grid_origin[0] + gx * proj_a   + gy * proj_b)
-    tile_origin_y = round(grid_origin[1] + gx * proj_b_y - gy * proj_a_y)
-    tile_origin = (tile_origin_x, tile_origin_y)
-    tile_start = (tile_origin_x - (img_size // 2), tile_origin_y + (img_size // 2))
-    tile_end   = (tile_origin_x + (img_size // 2), tile_origin_y - (img_size // 2))
+    if _homography is not None and _cam_origin is not None:
+        # Exact mapping: compute cam-space position then apply H.
+        cx = _cam_origin[0] + gx * _cam_a + gy * _cam_b
+        cy = _cam_origin[1] + gx * _cam_b - gy * _cam_a
+        proj_x, proj_y = cam_to_proj(cx, cy)
+    else:
+        # Fallback: rotation-aware linear formula in projector-pixel space.
+        proj_x = round(grid_origin[0] + gx * proj_a   + gy * proj_b)
+        proj_y = round(grid_origin[1] + gx * proj_b_y - gy * proj_a_y)
+    tile_origin = (proj_x, proj_y)
+    tile_start  = (proj_x - (img_size // 2), proj_y + (img_size // 2))
+    tile_end    = (proj_x + (img_size // 2), proj_y - (img_size // 2))
     return (tile_start, tile_end, tile_origin)
 
 # Function that sets the invalid move border flag
@@ -339,9 +429,18 @@ def projector_main():
     # Get project screen settings
     projector = monitors[PROJECTOR_INDEX]
     # Define projector resolution and expose at module level for CV calibration
-    global proj_w, proj_h
+    global proj_w, proj_h, calib_dot_proj_pts
     proj_w, proj_h = projector.width, projector.height
     print(f"[projector] Using display [{PROJECTOR_INDEX}]: {proj_w}x{proj_h}")
+
+    # Calibration dots at the four 25%/75% corners — spread across the projection area.
+    calib_dot_proj_pts = [
+        (round(proj_w * 0.25), round(proj_h * 0.25)),  # top-left
+        (round(proj_w * 0.75), round(proj_h * 0.25)),  # top-right
+        (round(proj_w * 0.75), round(proj_h * 0.75)),  # bottom-right
+        (round(proj_w * 0.25), round(proj_h * 0.75)),  # bottom-left
+    ]
+    print(f"[projector] Calibration dot positions: {calib_dot_proj_pts}")
 
     # Centre point of the display — also the default projector grid origin
     centre_w = proj_w // 2

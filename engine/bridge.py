@@ -39,12 +39,68 @@ API_BASE = "http://127.0.0.1:1234"
 _CV_PROC_W = 1920
 _CV_PROC_H = 1080
 
-_last_proj_tile_size: float | None = None   # tracks last calibrated value to avoid redundant calls
-_last_proj_angle:     float | None = None   # tracks last calibrated angle
+_last_proj_tile_size: float | None = None
+_last_proj_angle:     float | None = None
+_homography_done:     bool         = False   # True once H is set (loaded or computed)
+
+_CFG_PATH = ROOT / "cv" / "config.json"
+
+
+def _load_homography_from_config():
+    """Return a saved 3×3 H matrix from config.json, or None if not present."""
+    import json
+    import numpy as np
+    try:
+        with open(_CFG_PATH) as f:
+            cfg = json.load(f)
+        mat = cfg.get("homography_matrix")
+        if mat and len(mat) == 9:
+            return np.array(mat, dtype=np.float64).reshape(3, 3)
+    except Exception:
+        pass
+    return None
+
+
+def _save_homography_to_config(H):
+    """Persist H to config.json alongside existing keys."""
+    import json
+    try:
+        with open(_CFG_PATH) as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+    cfg["homography_matrix"] = [float(v) for v in H.flatten()]
+    with open(_CFG_PATH, "w") as f:
+        json.dump(cfg, f, indent=2)
+    print("[bridge] Homography saved to config.json.")
+
+
+def _maybe_calibrate_homography():
+    """Compute H from detected calibration dots if not already done."""
+    global _homography_done
+    if _homography_done:
+        return
+    if not projector.calib_dot_proj_pts:
+        return  # projector not yet started
+    if not Project_CV.calib_dots_found:
+        return  # dots not yet stably detected
+    H = projector.compute_homography(
+        Project_CV.calib_cam_points,
+        projector.calib_dot_proj_pts,
+    )
+    if H is None:
+        print("[bridge] Homography computation failed — resetting detection for retry.")
+        Project_CV.calib_dots_found = False
+        return
+    projector.set_homography(H)
+    _save_homography_to_config(H)
+    _homography_done = True
+    Project_CV.calib_complete = True
+    print("[bridge] Homography calibration complete.")
 
 
 def _sync_projector_calibration():
-    """Derive projector tile size, origin, and rotation from CV's grid and push to projector."""
+    """Push grid geometry to the projector every time tile_size or angle changes."""
     global _last_proj_tile_size, _last_proj_angle
     tile_size = Project_CV.grid_tile_size
     origin    = Project_CV.grid_origin
@@ -54,21 +110,34 @@ def _sync_projector_calibration():
     if projector.proj_w is None or projector.proj_h is None:
         return
     if tile_size == _last_proj_tile_size and angle == _last_proj_angle:
-        return  # already up to date
-    scale_x = projector.proj_w / _CV_PROC_W
-    scale_y = projector.proj_h / _CV_PROC_H
-    # Origin: player places the first tile on the startup cross, so the projector
-    # screen centre IS the physical origin — no estimation or offset needed.
-    proj_origin      = (projector.proj_w // 2, projector.proj_h // 2)
-    proj_tile_size   = round(tile_size * scale_x)   # X spacing
-    proj_tile_size_y = round(tile_size * scale_y)   # Y spacing (projector is 16:10, camera is 16:9)
+        return
+
+    angle_rad = math.radians(angle)
+    a = tile_size * math.cos(angle_rad)   # grid_tracker.a equivalent
+    b = tile_size * math.sin(angle_rad)   # grid_tracker.b equivalent
+
+    # Always push cam-space grid params so tile_grid_points can use H.
+    projector.set_cam_grid(origin, a, b)
+
+    # Compute tile size in projector pixels: exact from H, or scaled estimate.
+    pts = projector.proj_tile_size_from_H(origin, a, b)
+    if pts is not None:
+        proj_tile_size = proj_tile_size_y = pts
+    else:
+        scale_x = projector.proj_w / _CV_PROC_W
+        scale_y = projector.proj_h / _CV_PROC_H
+        proj_tile_size   = round(tile_size * scale_x)
+        proj_tile_size_y = round(tile_size * scale_y)
+
+    # Linear-fallback calibration (used when H not available).
+    proj_origin = (projector.proj_w // 2, projector.proj_h // 2)
     projector.set_proj_calibration(origin=proj_origin, tile_size=proj_tile_size,
                                    tile_size_y=proj_tile_size_y, angle_deg=angle)
     _last_proj_tile_size = tile_size
     _last_proj_angle     = angle
-    print(f"[bridge] Projector calibration updated — origin={proj_origin} (screen centre)"
-          f"  tile_size={proj_tile_size}px (x)  {proj_tile_size_y}px (y)"
-          f"  angle={angle:.1f}°")
+    h_status = "H" if projector._homography is not None else "linear"
+    print(f"[bridge] Projector calibration updated [{h_status}] — origin={proj_origin}"
+          f"  tile={proj_tile_size}px  angle={angle:.1f}°")
 
 
 # ── API helpers ───────────────────────────────────────────────────────────────
@@ -153,11 +222,15 @@ def _debug_proj_alignment(vp_tuples: list):
     print(f"[proj-align] cam_origin=({ox},{oy})  cam_tile={ts:.1f}px  angle={angle:.1f}°  "
           f"proj_origin=({pox},{poy}) [screen-centre]  "
           f"proj_tile=({projector.proj_tile_size}x,{projector.proj_tile_size_y}y)px")
+    using_h = projector._homography is not None and projector._cam_origin is not None
     for gx, gy in vp_tuples:
         cam_x = round(ox + gx * cam_a + gy * cam_b)
         cam_y = round(oy + gx * cam_b - gy * cam_a)
-        prj_x = round(pox + gx * projector.proj_a   + gy * projector.proj_b)
-        prj_y = round(poy + gx * projector.proj_b_y - gy * projector.proj_a_y)
+        if using_h:
+            prj_x, prj_y = projector.cam_to_proj(cam_x, cam_y)
+        else:
+            prj_x = round(pox + gx * projector.proj_a   + gy * projector.proj_b)
+            prj_y = round(poy + gx * projector.proj_b_y - gy * projector.proj_a_y)
         print(f"  grid({gx:+d},{gy:+d}):  cam=({cam_x},{cam_y})  proj=({prj_x},{prj_y})")
 
 
@@ -318,9 +391,19 @@ def main():
 
     print("[bridge] All components running. Waiting for /start...\n")
 
+    # Load a previously saved homography so calibration dots aren't needed every session.
+    _H = _load_homography_from_config()
+    if _H is not None:
+        projector.set_homography(_H)
+        global _homography_done
+        _homography_done = True
+        Project_CV.calib_complete = True
+        print("[bridge] Loaded saved homography from config.json.")
+
     try:
         # Wait for the frontend to POST /start before entering the game loop
         while engine_api.game_state is None:
+            _maybe_calibrate_homography()
             _sync_projector_calibration()
             time.sleep(0.1)
 
@@ -343,6 +426,7 @@ def main():
 
             while not turn_done:
                 try:
+                    _maybe_calibrate_homography()
                     _sync_projector_calibration()
 
                     if Project_CV.tile_checked:

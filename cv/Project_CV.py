@@ -44,6 +44,41 @@ last_placed_crop_path  = None    # Path to the most recently saved placed-slot c
 valid_placements       = None    # Bridge sets from /pending response: set of (gx, gy) coords valid for the current tile
 tile_blob_area         = None    # Area of the origin tile blob in proc pixels; used as dynamic area filter reference
 proj_clear_requested   = False   # CV sets when a tile is confirmed; bridge clears projection and resets this
+calib_dots_found       = False   # True once 4 green calibration dots are stably detected
+calib_cam_points       = None    # List of 4 (x, y) in proc-frame pixels (unordered)
+calib_complete         = False   # Set by bridge once H is established; gates tile detection
+
+
+_CALIB_STABLE_FRAMES = 15   # consecutive detections required before committing
+
+def _detect_calib_dots(blobs):
+    """Detect 4 projected calibration dots using the existing blob pipeline mask.
+
+    Uses the same saturation-based blobs as tile detection — avoids HSV tuning.
+    Returns a list of 4 (x, y) float centroids or None if not found.
+    Requires 4 similarly-sized blobs arranged in a convex quadrilateral.
+    """
+    contours, _ = cv.findContours(blobs, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    if len(contours) < 4:
+        return None
+    top4  = sorted(contours, key=cv.contourArea, reverse=True)[:4]
+    areas = [cv.contourArea(c) for c in top4]
+    if any(a < 100 for a in areas):
+        return None
+    med = sorted(areas)[1]   # second-smallest of 4
+    if not all(0.2 * med <= a <= 5.0 * med for a in areas):
+        return None  # sizes too dissimilar — probably not 4 identical circles
+    pts = []
+    for cnt in top4:
+        M = cv.moments(cnt)
+        if M['m00'] < 1:
+            return None
+        pts.append((M['m10'] / M['m00'], M['m01'] / M['m00']))
+    # Require the 4 centroids to form a convex quadrilateral (no collinear blobs).
+    hull = cv.convexHull(np.array(pts, dtype=np.float32).reshape(-1, 1, 2))
+    if len(hull) < 4:
+        return None
+    return pts
 
 
 _SIDE_VECTORS = {
@@ -322,8 +357,9 @@ def cv_main_loop():
     # Count consecutive non-growth frames; require 2 in a row before resetting
     # the growth counter, so one flickering frame doesn't undo 2+ growth frames.
     non_growth_count = 0
+    _calib_stable    = 0   # consecutive frames with 4 green dots found
 
-    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, valid_meeple_sides, last_id_crop_path, last_placed_crop_path, valid_placements, tile_blob_area, proj_clear_requested
+    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, valid_meeple_sides, last_id_crop_path, last_placed_crop_path, valid_placements, tile_blob_area, proj_clear_requested, calib_dots_found, calib_cam_points, calib_complete
 
     print("Place the first tile on the board — it will be detected automatically. Press 'b' to force-confirm.")
 
@@ -352,6 +388,31 @@ def cv_main_loop():
 
         # ── Board not set yet ─────────────────────────────────────────────────
         if board_mask is None:
+            # Calibration dot detection — look for 4 green circles projected by the
+            # projector. Once stably found, expose positions for the bridge to compute H.
+            # ── Calibration dot detection ────────────────────────────────────
+            # Run until the bridge sets calib_complete (H established or loaded).
+            if not calib_complete:
+                if not calib_dots_found:
+                    dots = _detect_calib_dots(blobs)
+                    if dots is not None:
+                        _calib_stable += 1
+                        if _calib_stable >= _CALIB_STABLE_FRAMES:
+                            calib_cam_points = [(round(x), round(y)) for x, y in dots]
+                            calib_dots_found = True
+                            print(f"[CV] Calibration dots found: {calib_cam_points}")
+                    else:
+                        _calib_stable = 0
+                # Block tile detection until calibration is done.
+                cv.putText(result, f"Waiting for calibration... ({_calib_stable}/{_CALIB_STABLE_FRAMES})", (10, 30),
+                           cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                # Show blobs mask alongside the result so the dot detection is visible.
+                panel_w, panel_h = DISP_W // 2, DISP_H // 2
+                p_blob = cv.resize(cv.cvtColor(blobs, cv.COLOR_GRAY2BGR), (panel_w, panel_h))
+                p_result = cv.resize(result, (panel_w, panel_h))
+                cv.imshow("CV Debug", np.hstack([p_blob, p_result]))
+                continue
+
             for cnt in valid:
                 rect = cv.minAreaRect(cnt)
                 box  = np.intp(cv.boxPoints(rect))
