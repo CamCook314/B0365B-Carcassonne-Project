@@ -171,10 +171,10 @@ class gameStateClass:
 		overstayed = []
 		for til in self.tile_dict_turn:
 			roll = random.random()
-			if roll < 0.02: # 5% chance
+			if roll < 0.03: # 3% chance
 				til.bad_tile = True
 				projector.add_img("BAD_TILE", (x, y))
-			elif roll > 0.98:
+			elif roll > 0.97:
 				til.good_tile = True
 				projector.add_img("GOOD_TILE", (x, y))
 

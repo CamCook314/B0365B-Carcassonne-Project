@@ -38,7 +38,7 @@ class Event:
         self.name = "extra turn"
         game.extra_turn = True
 
-    def volcano_event(self, game): #gives 8 turns for players to have to fully surround the event tile other wise all meeples deleted
+    def volcano_event(self, game): #gives 10 turns for players to have to fully surround the event tile other wise all meeples deleted
         self.name = "volcano"
         self.turn = game.current_turn
         self.active = True
@@ -46,7 +46,7 @@ class Event:
 
 
     def volcano_check(self, game): # runs every turn
-        if game.current_turn < self.turn + 8: #change this for more or less turns
+        if game.current_turn < self.turn + 10: #change this for more or less turns
             return
 
         arr_r, arr_c = game.to_array_index(self.coords[0], self.coords[1])

@@ -3,6 +3,7 @@ import numpy as np
 import screeninfo
 import time
 import json
+import math
 import os
 from . import Project_CV
 from collections import defaultdict
@@ -50,7 +51,7 @@ proj_blank_rendered.set()  # starts "clear" — no projection showing at startup
 ## PROJECTOR DISPLAY INDEX
 # 0 = primary monitor, 1 = first extended display, 2 = second, etc.
 # Run once to see all detected monitors printed at startup, then set this.
-PROJECTOR_INDEX = 3
+PROJECTOR_INDEX = 1
 
 ## TILE SIZE
 TILE_SIZE = 65
@@ -73,22 +74,40 @@ EVENT_SIZE  = round(0.6 * TILE_SIZE)
 #              centre at startup to match the startup cross, updated by CV once
 #              the grid is established via set_proj_calibration().
 # proj_tile_size: projector pixels per tile — derived from camera tile size × scale.
-proj_origin      = None   # set in projector_main() once resolution is known
-proj_tile_size   = TILE_SIZE   # projector pixels per tile — X axis
-proj_tile_size_y = TILE_SIZE   # projector pixels per tile — Y axis (may differ due to aspect ratio)
+# proj_a / proj_b: rotation-aware step vectors for the grid (like grid_tracker.a/b but
+#   scaled to projector pixels). Moving right by 1 grid unit shifts by (+proj_a, +proj_b_y)
+#   and moving up by 1 grid unit shifts by (+proj_b, -proj_a_y).
+proj_origin      = None         # set in projector_main() once resolution is known
+proj_tile_size   = TILE_SIZE    # projector pixels per tile — X axis
+proj_tile_size_y = TILE_SIZE    # projector pixels per tile — Y axis (may differ due to aspect ratio)
+proj_angle_deg   = 0.0          # current board rotation angle in degrees
+proj_a           = float(TILE_SIZE)   # x-step for +1 grid-x  (tile_size_x * cos θ)
+proj_b           = 0.0                # x-step for +1 grid-y  (tile_size_x * sin θ)
+proj_a_y         = float(TILE_SIZE)   # y-step for +1 grid-y  (tile_size_y * cos θ)
+proj_b_y         = 0.0                # y-step for +1 grid-x  (tile_size_y * sin θ)
 
 # Projector resolution — set in projector_main(); read by CV to compute scale factor.
 proj_w = None
 proj_h = None
 
-def set_proj_calibration(origin=None, tile_size=None, tile_size_y=None):
+def set_proj_calibration(origin=None, tile_size=None, tile_size_y=None, angle_deg=None):
     global proj_origin, proj_tile_size, proj_tile_size_y
+    global proj_angle_deg, proj_a, proj_b, proj_a_y, proj_b_y
     if origin is not None:
         proj_origin      = (origin[0] + PROJ_OFFSET_X, origin[1] + PROJ_OFFSET_Y)
     if tile_size is not None:
         proj_tile_size   = tile_size
     if tile_size_y is not None:
         proj_tile_size_y = tile_size_y
+    if angle_deg is not None:
+        proj_angle_deg   = angle_deg
+    θ      = math.radians(proj_angle_deg)
+    cos_θ  = math.cos(θ)
+    sin_θ  = math.sin(θ)
+    proj_a   = proj_tile_size   * cos_θ
+    proj_b   = proj_tile_size   * sin_θ
+    proj_a_y = proj_tile_size_y * cos_θ
+    proj_b_y = proj_tile_size_y * sin_θ
 
 ## IMAGE DICTIONARY LOCK
 img_lock = threading.Lock()
@@ -150,18 +169,16 @@ def startup(canvas, centre_x, centre_y):
     return canvas
 
 # Function that calculates a given coords tile centre point, and start and end pixel coords.
-# grid_tile_size is the projector-pixel spacing per grid unit in X;
-# tile_size_y is the spacing in Y (defaults to grid_tile_size if not given).
-def tile_grid_points(grid_origin, grid_tile_size, tile_coord, img_size, tile_size_y=None):
-    if tile_size_y is None:
-        tile_size_y = grid_tile_size
-    origin = grid_origin
-    tile_x = round(grid_tile_size * tile_coord[0])
-    tile_y = round(tile_size_y    * tile_coord[1])
-    # Y axis is flipped: positive grid-Y = upward on projector canvas
-    tile_origin = (origin[0] + tile_x, origin[1] - tile_y)
-    tile_start = (tile_origin[0] - (img_size // 2), tile_origin[1] + (img_size // 2))
-    tile_end   = (tile_origin[0] + (img_size // 2), tile_origin[1] - (img_size // 2))
+# Uses module-level proj_a/proj_b/proj_a_y/proj_b_y step vectors so board rotation is
+# accounted for automatically. grid_tile_size and tile_size_y are kept for API compat.
+def tile_grid_points(grid_origin, _grid_tile_size, tile_coord, img_size, _tile_size_y=None):
+    gx, gy = tile_coord
+    # Rotation-aware step: matches grid_tracker.grid_to_px but in projector-pixel space.
+    tile_origin_x = round(grid_origin[0] + gx * proj_a   + gy * proj_b)
+    tile_origin_y = round(grid_origin[1] + gx * proj_b_y - gy * proj_a_y)
+    tile_origin = (tile_origin_x, tile_origin_y)
+    tile_start = (tile_origin_x - (img_size // 2), tile_origin_y + (img_size // 2))
+    tile_end   = (tile_origin_x + (img_size // 2), tile_origin_y - (img_size // 2))
     return (tile_start, tile_end, tile_origin)
 
 # Function that sets the invalid move border flag
