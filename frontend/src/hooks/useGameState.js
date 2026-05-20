@@ -16,7 +16,6 @@ export function useGameState(playSound = null) {
     try {
       const data = await getGameState();
       const historyData = await getHistory();
-
       if (playSound && previousGameStateRef.current && data) {
         // check if turn has changed
         if (previousGameStateRef.current.current_player !== data.current_player) {
@@ -48,6 +47,11 @@ export function useGameState(playSound = null) {
         // check if game has ended
         if (!previousGameStateRef.current.game_over && data.game_over) {
           playSound('gameEnd');
+        }
+
+        // check if any tile has been detected by CV to show player that their tile is ready
+        if (data.pending_tile && !previousGameStateRef.current.pending_tile) {
+          playSound('detectedTile');
         }
       }
 

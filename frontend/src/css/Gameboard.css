@@ -37,10 +37,10 @@
 /* Meeple dots */
 .meeple {
   position: absolute;
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 1.5px solid var(--bg);
+  border: 1.5px solid white;
   z-index: 5;
   pointer-events: none;
 }

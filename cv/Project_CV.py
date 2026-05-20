@@ -246,9 +246,9 @@ def cv_main_loop():
     INVALID_DISPLAY = "invalid_display" # Engine rejected — show warning, wait for removal
 
     # --- Meeple detection ---
-    MEEPLE_BASELINE_SETTLE = 60   # Frames to roll baseline before locking (~2s); arm must clear
-    MEEPLE_CONFIRM_FRAMES  = 30   # Consecutive frames with meeple to commit     (~1s at 30fps)
-    MEEPLE_SKIP_FRAMES     = 30   # Consecutive frames with a new unplaced tile to skip (~1s)
+    MEEPLE_BASELINE_SETTLE = 30   # Frames to roll baseline before locking (~2s); arm must clear
+    MEEPLE_CONFIRM_FRAMES  = 20   # Consecutive frames with meeple to commit     (~1s at 30fps)
+    MEEPLE_SKIP_FRAMES     = 15   # Consecutive frames with a new unplaced tile to skip (~1s)
     MEEPLE_SAFETY_FRAMES   = 600  # Hard safety timeout (~20s) in case neither fires
 
     meeple_frame_count      = 0
@@ -262,9 +262,9 @@ def cv_main_loop():
     # --- Board growth / removal detection ---
     BOARD_GROWTH_THRESHOLD  = 1000   # Min pixel area increase to count as growth
     SAT_GROWTH_THRESHOLD    = 500    # Min new saturation pixels inside board (catches centre tiles)
-    GROWTH_CONFIRM_FRAMES     = 30   # Consecutive frames of growth needed to commit    (~1s at 30fps)
-    REMOVAL_CONFIRM_FRAMES    = 40   # Consecutive frames of shrinkage to confirm removal (~1.3s)
-    PLACEMENT_COOLDOWN_FRAMES = 120  # Frames to ignore growth after identification (~4s); lets player move tile
+    GROWTH_CONFIRM_FRAMES     = 15   # Consecutive frames of growth needed to commit    (~1s at 30fps)
+    REMOVAL_CONFIRM_FRAMES    = 25   # Consecutive frames of shrinkage to confirm removal (~1.3s)
+    PLACEMENT_COOLDOWN_FRAMES = 40  # Frames to ignore growth after identification (~4s); lets player move tile
 
     # --- Tile identification stability ---
     TILE_CONFIRM_FRAMES = 40   # Frames the unplaced tile must stay still before saving (~1.3s at 30fps)

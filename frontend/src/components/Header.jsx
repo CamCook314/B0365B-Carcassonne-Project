@@ -1,4 +1,4 @@
-export default function Header({ currentTurn, boardTiles, remaining }) {
+export default function Header({ currentTurn, boardTiles, remaining, isMuted, toggleMute }) {
   return <header className="header">
     <div>
       <h1>
@@ -30,6 +30,23 @@ export default function Header({ currentTurn, boardTiles, remaining }) {
           CV Live
         </span>
       </div>
+      <MuteButton toggleMute={toggleMute} isMuted={isMuted} />
     </div>
   </header>;
 }
+
+function MuteButton({ toggleMute, isMuted }) {
+  return <button
+    onClick={toggleMute}
+    title={isMuted ? "Unmute" : "Mute"}
+    style={{
+      background: "transparent",
+      border: "none",
+      padding: 3,
+      fontSize: 18,
+    }}
+  >
+    {isMuted ? "🔈" : "🔊"}
+  </button>;
+}
+

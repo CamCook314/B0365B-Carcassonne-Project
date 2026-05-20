@@ -567,7 +567,7 @@ def rotate_tile():
 
     # find the tile at (x, y)
     board = game_state.board
-    print(f" board state: {game_state.board}")
+    #print(f" board state: {game_state.board}")
 
     array_row, array_col = game_state.to_array_index(x, y) # convert to array indices
     tile = board[array_row][array_col]
@@ -741,5 +741,5 @@ def reset_game():
 if __name__ == "__main__":
     # Run api.py directly (without CV or frontend) for engine-only testing.
     # For the full system, run engine/bridge.py instead.
-    print("API running on http://127.0.0.1:1234")
-    app.run(host="127.0.0.1", port=1234, debug=True, use_reloader=False)
+    print("API running on http://0.0.0.0:1234 (bound to all interfaces)")
+    app.run(host="0.0.0.0", port=1234, debug=True, use_reloader=False)

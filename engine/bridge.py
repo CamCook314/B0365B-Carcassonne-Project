@@ -17,6 +17,7 @@ Then polls CV globals every 100 ms and makes the appropriate API calls:
 import sys
 import shutil
 import time
+import math
 import threading
 import subprocess
 import requests
@@ -39,16 +40,16 @@ _CV_PROC_W = 1920
 _CV_PROC_H = 1080
 
 _last_proj_tile_size: float | None = None   # tracks last calibrated value to avoid redundant calls
-_last_proj_angle: float | None = None       # tracks last calibrated angle
+_last_proj_angle:     float | None = None   # tracks last calibrated angle
 
 
 def _sync_projector_calibration():
-    """Derive projector tile size, origin, and rotation from CV's measured grid and push to projector."""
+    """Derive projector tile size, origin, and rotation from CV's grid and push to projector."""
     global _last_proj_tile_size, _last_proj_angle
     tile_size = Project_CV.grid_tile_size
     origin    = Project_CV.grid_origin
-    angle     = Project_CV.grid_angle
-    if tile_size is None or origin is None or angle is None:
+    angle     = Project_CV.grid_angle or 0.0
+    if tile_size is None or origin is None:
         return
     if projector.proj_w is None or projector.proj_h is None:
         return
@@ -56,15 +57,18 @@ def _sync_projector_calibration():
         return  # already up to date
     scale_x = projector.proj_w / _CV_PROC_W
     scale_y = projector.proj_h / _CV_PROC_H
-    proj_origin      = (round(origin[0] * scale_x), round(origin[1] * scale_y))
+    # Origin: player places the first tile on the startup cross, so the projector
+    # screen centre IS the physical origin — no estimation or offset needed.
+    proj_origin      = (projector.proj_w // 2, projector.proj_h // 2)
     proj_tile_size   = round(tile_size * scale_x)   # X spacing
     proj_tile_size_y = round(tile_size * scale_y)   # Y spacing (projector is 16:10, camera is 16:9)
     projector.set_proj_calibration(origin=proj_origin, tile_size=proj_tile_size,
-                                   tile_size_y=proj_tile_size_y, angle=angle)
+                                   tile_size_y=proj_tile_size_y, angle_deg=angle)
     _last_proj_tile_size = tile_size
     _last_proj_angle     = angle
-    print(f"[bridge] Projector calibration updated — origin={proj_origin}"
-          f"  tile_size={proj_tile_size}px (x)  {proj_tile_size_y}px (y)  angle={angle:.2f}°")
+    print(f"[bridge] Projector calibration updated — origin={proj_origin} (screen centre)"
+          f"  tile_size={proj_tile_size}px (x)  {proj_tile_size_y}px (y)"
+          f"  angle={angle:.1f}°")
 
 
 # ── API helpers ───────────────────────────────────────────────────────────────
@@ -135,22 +139,25 @@ def _debug_proj_alignment(vp_tuples: list):
     Helps tune PROJ_OFFSET_X / PROJ_OFFSET_Y in cv/config.json when the
     projected outlines are visually offset from the physical tile positions.
     """
-    gox = Project_CV.grid_origin
-    ts  = Project_CV.grid_tile_size
+    gox   = Project_CV.grid_origin
+    ts    = Project_CV.grid_tile_size
+    angle = Project_CV.grid_angle or 0.0
     if gox is None or ts is None:
         return
     pox, poy = projector.proj_origin
-    pts_x    = projector.proj_tile_size
-    pts_y    = projector.proj_tile_size_y
     ox, oy   = gox
-    print(f"[proj-align] cam_origin=({ox},{oy})  cam_tile={ts}px  "
-          f"proj_origin=({pox},{poy})  proj_tile=({pts_x}x,{pts_y}y)px  "
-          f"offset=({projector.PROJ_OFFSET_X},{projector.PROJ_OFFSET_Y})")
+    # Camera step vectors (same as grid_tracker.a/b)
+    θ     = math.radians(angle)
+    cam_a = ts * math.cos(θ)
+    cam_b = ts * math.sin(θ)
+    print(f"[proj-align] cam_origin=({ox},{oy})  cam_tile={ts:.1f}px  angle={angle:.1f}°  "
+          f"proj_origin=({pox},{poy}) [screen-centre]  "
+          f"proj_tile=({projector.proj_tile_size}x,{projector.proj_tile_size_y}y)px")
     for gx, gy in vp_tuples:
-        cam_x = round(ox + gx * ts)
-        cam_y = round(oy - gy * ts)
-        prj_x = round(pox + gx * pts_x)
-        prj_y = round(poy - gy * pts_y)
+        cam_x = round(ox + gx * cam_a + gy * cam_b)
+        cam_y = round(oy + gx * cam_b - gy * cam_a)
+        prj_x = round(pox + gx * projector.proj_a   + gy * projector.proj_b)
+        prj_y = round(poy + gx * projector.proj_b_y - gy * projector.proj_a_y)
         print(f"  grid({gx:+d},{gy:+d}):  cam=({cam_x},{cam_y})  proj=({prj_x},{prj_y})")
 
 
@@ -266,7 +273,7 @@ def _handle_meeple_skip():
 def _run_api():
     import logging
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    engine_api.app.run(host="127.0.0.1", port=1234, debug=False, use_reloader=False)
+    engine_api.app.run(host="0.0.0.0", port=1234, debug=False, use_reloader=False)
 
 
 def _run_cv():

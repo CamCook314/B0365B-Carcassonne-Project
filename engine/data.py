@@ -171,10 +171,10 @@ class gameStateClass:
 		overstayed = []
 		for til in self.tile_dict_turn:
 			roll = random.random()
-			if roll < 0.02: # 5% chance
+			if roll < 0.03: # 3% chance
 				til.bad_tile = True
 				projector.add_img("BAD_TILE", (x, y))
-			elif roll > 0.98:
+			elif roll > 0.97:
 				til.good_tile = True
 				projector.add_img("GOOD_TILE", (x, y))
 
@@ -668,6 +668,12 @@ class structures:
 			if len(self.players) == 0:
 				return
 			self.players[0].score += 9
+			self.players[0].meeples += 1
+			for entry in self.tiles_used:
+				t = entry[0] if isinstance(entry, tuple) else entry
+				if getattr(t, 'meeple_attached', None):
+					t.meeple_attached = False
+					t.meeple_player_index = None
 			return
 
 		temp_score = 0
@@ -696,7 +702,13 @@ class structures:
 		for player in self.players:
 			player.score += temp_score
 			player.ability(self, game)
-		pass
+			player.meeples += 1
+
+		for entry in self.tiles_used:
+			t = entry[0] if isinstance(entry, tuple) else entry
+			if getattr(t, 'meeple_attached', None):
+				t.meeple_attached = False
+				t.meeple_player_index = None
 
 	def check_completed(self, board):
 		"""
