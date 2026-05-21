@@ -40,110 +40,80 @@ API_BASE = "http://127.0.0.1:1234"
 _CV_PROC_W = 1920
 _CV_PROC_H = 1080
 
-_last_proj_tile_size: float | None = None   # tracks last calibrated value to avoid redundant calls
-_last_proj_angle:     float | None = None   # tracks last calibrated angle
+_last_proj_tile_size: float | None = None
+_last_proj_angle:     float | None = None
+_homography_done:     bool         = False   # True once H is set (loaded or computed)
+_last_rotation_seq:   int          = 0       # tracks engine_api.board_rotation_seq
 
-# ── Projector affine auto-calibration ─────────────────────────────────────────
-# After each confirmed tile placement we record the physical correspondence:
-#   cam_pos  — camera-space position of the placed tile (from CV grid globals)
-#   proj_pos — projector pixel we were targeting for that slot at placement time
-# With 3+ non-collinear points we fit a least-squares affine (cam → proj) and
-# derive accurate step vectors, removing the need for manual PROJ_SCALE tuning.
-_proj_cal_points: list = []          # [(cam_pos, proj_pos), ...]
-_affine_mx: "np.ndarray | None" = None   # affine row for x: [m00, m01, m02]
-_affine_my: "np.ndarray | None" = None   # affine row for y: [m10, m11, m12]
+_CFG_PATH = ROOT / "cv" / "config.json"
 
 
-def _cam_pos_for_grid(gx: int, gy: int) -> tuple:
-    ox, oy = Project_CV.grid_origin
-    ts     = Project_CV.grid_tile_size
-    angle  = Project_CV.grid_angle or 0.0
-    a = ts * math.cos(math.radians(angle))
-    b = ts * math.sin(math.radians(angle))
-    return (ox + gx*a + gy*b, oy + gx*b - gy*a)
+def _load_homography_from_config():
+    """Return a saved 3×3 H matrix from config.json, or None if not present."""
+    import json
+    try:
+        with open(_CFG_PATH) as f:
+            cfg = json.load(f)
+        mat = cfg.get("homography_matrix")
+        if mat and len(mat) == 9:
+            return np.array(mat, dtype=np.float64).reshape(3, 3)
+    except Exception:
+        pass
+    return None
 
 
-def _proj_pos_for_grid(gx: int, gy: int) -> tuple:
-    px = projector.proj_origin[0] + gx * projector.proj_a   + gy * projector.proj_b
-    py = projector.proj_origin[1] + gx * projector.proj_b_y - gy * projector.proj_a_y
-    return (round(px), round(py))
+def _save_homography_to_config(H):
+    """Persist H to config.json alongside existing keys."""
+    import json
+    try:
+        with open(_CFG_PATH) as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+    cfg["homography_matrix"] = [float(v) for v in H.flatten()]
+    with open(_CFG_PATH, "w") as f:
+        json.dump(cfg, f, indent=2)
+    print("[bridge] Homography saved to config.json.")
 
 
-def _collinear(cam_pts: list) -> bool:
-    """True if all camera points lie on a single line (can't constrain 2D affine)."""
-    if len(cam_pts) < 3:
-        return True
-    (x0, y0), (x1, y1) = cam_pts[0], cam_pts[1]
-    for x, y in cam_pts[2:]:
-        if abs((x1-x0)*(y-y0) - (y1-y0)*(x-x0)) > 100:
-            return False
-    return True
+def _maybe_calibrate_homography():
+    """Compute H from detected calibration dots if not already done.
 
-
-def _apply_affine_to_steps():
-    """Derive projector step vectors from the fitted affine and current grid angle."""
-    if _affine_mx is None or _affine_my is None:
+    Called every poll cycle.  Does nothing until CV sets calib_dots_found and
+    the projector has populated calib_dot_proj_pts.
+    """
+    global _homography_done
+    if _homography_done:
         return
-    ts    = Project_CV.grid_tile_size
-    angle = Project_CV.grid_angle or 0.0
-    if ts is None:
-        return
-    a  = ts * math.cos(math.radians(angle))
-    b  = ts * math.sin(math.radians(angle))
-    mx, my = _affine_mx, _affine_my
-    projector.set_proj_steps(
-        a   = float(mx[0]*a + mx[1]*b),
-        b   = float(mx[0]*b - mx[1]*a),
-        a_y = float(my[1]*a - my[0]*b),
-        b_y = float(my[0]*a + my[1]*b),
+    if not projector.calib_dot_proj_pts:
+        return  # projector thread not yet started
+    if not Project_CV.calib_dots_found:
+        return  # CV has not yet stably detected the 4 dots
+    H = projector.compute_homography(
+        Project_CV.calib_cam_points,
+        projector.calib_dot_proj_pts,
     )
-
-
-def _fit_proj_affine():
-    """Least-squares fit of cam→proj affine from all calibration points."""
-    global _affine_mx, _affine_my
-    cam_pts  = [c for c, _ in _proj_cal_points]
-    proj_pts = [p for _, p in _proj_cal_points]
-    if len(cam_pts) < 3 or _collinear(cam_pts):
+    if H is None:
+        print("[bridge] Homography computation failed — resetting dot detection for retry.")
+        Project_CV.calib_dots_found = False
         return
-    A  = np.array([[cx, cy, 1.0] for cx, cy in cam_pts])
-    bx = np.array([float(px) for px, _ in proj_pts])
-    by = np.array([float(py) for _, py in proj_pts])
-    mx, _, _, _ = np.linalg.lstsq(A, bx, rcond=None)
-    my, _, _, _ = np.linalg.lstsq(A, by, rcond=None)
-    _affine_mx, _affine_my = mx, my
-    _apply_affine_to_steps()
-    resid_x = float(np.max(np.abs(A @ mx - bx)))
-    resid_y = float(np.max(np.abs(A @ my - by)))
-    print(f"[bridge] Affine proj calibration — {len(cam_pts)} pts  "
-          f"max residual=({resid_x:.1f}, {resid_y:.1f})px")
-
-
-def _add_proj_cal_point(gx: int, gy: int):
-    """Record a confirmed tile placement as a cam↔proj calibration correspondence."""
-    if Project_CV.grid_origin is None or Project_CV.grid_tile_size is None:
-        return
-    if projector.proj_origin is None or projector.proj_w is None:
-        return
-    cam_pos = _cam_pos_for_grid(gx, gy)
-    # Origin is always anchored to screen centre — don't infer from (possibly
-    # formula-derived) step vectors, which may be wrong before affine converges.
-    proj_pos = ((projector.proj_w // 2, projector.proj_h // 2)
-                if (gx == 0 and gy == 0)
-                else _proj_pos_for_grid(gx, gy))
-    # Skip duplicates (same physical location within 5px)
-    if any(abs(c[0]-cam_pos[0]) < 5 and abs(c[1]-cam_pos[1]) < 5
-           for c, _ in _proj_cal_points):
-        return
-    _proj_cal_points.append((cam_pos, proj_pos))
-    print(f"[bridge] Cal point #{len(_proj_cal_points)}: "
-          f"grid({gx:+d},{gy:+d})  cam=({cam_pos[0]:.0f},{cam_pos[1]:.0f})  "
-          f"proj=({proj_pos[0]},{proj_pos[1]})")
-    _fit_proj_affine()
+    projector.set_homography(H)
+    _save_homography_to_config(H)
+    _homography_done          = True
+    Project_CV.calib_complete = True
+    print("[bridge] Homography calibration complete.")
 
 
 def _sync_projector_calibration():
-    """Derive projector tile size, origin, and rotation from CV's grid and push to projector."""
+    """Push grid geometry to the projector every poll cycle.
+
+    set_cam_grid is called unconditionally so that _cam_origin stays current as
+    the grid refits after each tile placement (tile_size rarely changes but
+    origin drifts with every confirm_placement call).
+
+    set_proj_calibration (the heavier linear-fallback path) is only called when
+    tile_size or angle actually changes.
+    """
     global _last_proj_tile_size, _last_proj_angle
     tile_size = Project_CV.grid_tile_size
     origin    = Project_CV.grid_origin
@@ -152,24 +122,66 @@ def _sync_projector_calibration():
         return
     if projector.proj_w is None or projector.proj_h is None:
         return
+
+    angle_rad = math.radians(angle)
+    a = tile_size * math.cos(angle_rad)
+    b = tile_size * math.sin(angle_rad)
+    c = Project_CV.grid_c   # y-step x-component; None until 6-param fit
+    d = Project_CV.grid_d   # y-step y-component; None until 6-param fit
+
+    # Always update cam-space grid params so H-based tile_grid_points stays current
+    # even when tile_size and angle haven't changed.
+    projector.set_cam_grid(origin, a, b, c, d)
+
     if tile_size == _last_proj_tile_size and angle == _last_proj_angle:
-        return  # already up to date
+        return  # linear calibration already up to date
+
+    # Tile SIZE: linear scale from cam proc pixels to projector pixels.
     scale_x = projector.proj_w / _CV_PROC_W
     scale_y = projector.proj_h / _CV_PROC_H
-    # Origin: player places the first tile on the startup cross, so the projector
-    # screen centre IS the physical origin — no estimation or offset needed.
-    proj_origin      = (projector.proj_w // 2, projector.proj_h // 2)
-    proj_tile_size   = round(tile_size * scale_x)   # X spacing
-    proj_tile_size_y = round(tile_size * scale_y)   # Y spacing (projector is 16:10, camera is 16:9)
+    proj_tile_size   = round(tile_size * scale_x)
+    proj_tile_size_y = round(tile_size * scale_y)
+
+    # proj_origin: projector centre — the board is physically positioned so that
+    # the origin tile sits under the projector centre (same as the startup cross).
+    proj_origin = (projector.proj_w // 2, projector.proj_h // 2)
     projector.set_proj_calibration(origin=proj_origin, tile_size=proj_tile_size,
                                    tile_size_y=proj_tile_size_y, angle_deg=angle)
-    # If affine calibration is active, override the formula-based step vectors.
-    _apply_affine_to_steps()
     _last_proj_tile_size = tile_size
     _last_proj_angle     = angle
-    print(f"[bridge] Projector calibration updated — origin={proj_origin} (screen centre)"
-          f"  tile_size={proj_tile_size}px (x)  {proj_tile_size_y}px (y)"
-          f"  angle={angle:.1f}°")
+    print(f"[bridge] Projector calibration updated — "
+          f"tile={proj_tile_size}px  angle={angle:.1f}°")
+
+
+def _refresh_valid_on_rotation():
+    """Re-call /pending when a board tile was rotated via the frontend.
+
+    The frontend's /rotate endpoint updates the board but doesn't retrigger
+    /pending.  Without this, valid_placements and the projector overlay stay
+    stale until the next full tile_checked cycle.
+    """
+    global _last_rotation_seq
+    seq = engine_api.board_rotation_seq
+    if seq == _last_rotation_seq:
+        return
+    _last_rotation_seq = seq
+    tile_id = Project_CV.tile_id
+    if tile_id is None or Project_CV.grid_origin is None:
+        return
+    pending_family = int(tile_id.replace("ID", "")) // 4
+    candidates = [
+        rid for _, rid in Project_CV.tile_candidates
+        if int(rid.replace("ID", "")) // 4 != pending_family
+    ][:20]
+    resp = _post("/pending", {"tile_id": tile_id, "candidates": candidates})
+    if resp and "error" not in resp:
+        vp = resp.get("valid_positions", [])
+        vp_tuples = [(int(p[0]), int(p[1])) for p in vp]
+        Project_CV.valid_placements = set(vp_tuples)
+        projector.set_proj_valid(vp_tuples)
+        print(f"[bridge] Board rotation — refreshed valid positions: {len(vp)} {sorted(vp_tuples)}")
+    else:
+        print(f"[bridge] Board rotation — /pending refresh failed: {resp}")
 
 
 # ── API helpers ───────────────────────────────────────────────────────────────
@@ -237,29 +249,23 @@ def _post(path: str, body: dict) -> dict | None:
 def _debug_proj_alignment(vp_tuples: list):
     """Print camera-PROC pixel vs projector pixel for each valid grid position.
 
-    Helps tune PROJ_OFFSET_X / PROJ_OFFSET_Y in cv/config.json when the
-    projected outlines are visually offset from the physical tile positions.
+    Mirrors exactly what tile_grid_points will compute so the output is
+    directly comparable to what appears on the projected surface.
     """
-    gox   = Project_CV.grid_origin
-    ts    = Project_CV.grid_tile_size
-    angle = Project_CV.grid_angle or 0.0
+    gox = Project_CV.grid_origin
+    ts  = Project_CV.grid_tile_size
     if gox is None or ts is None:
         return
-    pox, poy = projector.proj_origin
-    ox, oy   = gox
-    # Camera step vectors (same as grid_tracker.a/b)
-    θ     = math.radians(angle)
-    cam_a = ts * math.cos(θ)
-    cam_b = ts * math.sin(θ)
-    print(f"[proj-align] cam_origin=({ox},{oy})  cam_tile={ts:.1f}px  angle={angle:.1f}°  "
-          f"proj_origin=({pox},{poy}) [screen-centre]  "
-          f"proj_tile=({projector.proj_tile_size}x,{projector.proj_tile_size_y}y)px")
+    using_H = projector._homography is not None and projector._cam_origin is not None
+    print(f"[proj-align] cam_origin={gox}  cam_tile={ts:.1f}px  "
+          f"angle={Project_CV.grid_angle or 0.0:.1f}°  "
+          f"mode={'H+6param' if using_H else 'linear'}")
+    dummy_sz = max(1, round(ts * projector.VALID_MARKER_SCALE *
+                            projector.proj_w / 1920))
     for gx, gy in vp_tuples:
-        cam_x = round(ox + gx * cam_a + gy * cam_b)
-        cam_y = round(oy + gx * cam_b - gy * cam_a)
-        prj_x = round(pox + gx * projector.proj_a   + gy * projector.proj_b)
-        prj_y = round(poy + gx * projector.proj_b_y - gy * projector.proj_a_y)
-        print(f"  grid({gx:+d},{gy:+d}):  cam=({cam_x},{cam_y})  proj=({prj_x},{prj_y})")
+        _, _, origin_pt = projector.tile_grid_points(
+            projector.proj_origin, projector.proj_tile_size, (gx, gy), dummy_sz)
+        print(f"  grid({gx:+d},{gy:+d}):  proj={origin_pt}")
 
 
 def _handle_tile_checked():
@@ -313,7 +319,6 @@ def _handle_cv_to_engine():
         projector.clear_proj_valid()
         projector.proj_blank_rendered.wait(timeout=0.5)
         Project_CV.game_response = (True, 1)
-        _add_proj_cal_point(gx, gy)
         _update_remaining_families()
         _save_id_crop_as_game_ref(confirmed_id)
 
@@ -420,9 +425,22 @@ def main():
 
     print("[bridge] All components running. Waiting for /start...\n")
 
+    # Load a previously saved homography so calibration dots aren't needed every run.
+    # This also sets calib_complete so CV doesn't block on dot detection.
+    _H = _load_homography_from_config()
+    if _H is not None:
+        projector.set_homography(_H)
+        global _homography_done
+        _homography_done          = True
+        Project_CV.calib_complete = True
+        print("[bridge] Loaded saved homography from config.json.")
+    else:
+        print("[bridge] No saved homography — projector will show calibration dots.")
+
     try:
         # Wait for the frontend to POST /start before entering the game loop
         while engine_api.game_state is None:
+            _maybe_calibrate_homography()
             _sync_projector_calibration()
             time.sleep(0.1)
 
@@ -445,7 +463,9 @@ def main():
 
             while not turn_done:
                 try:
+                    _maybe_calibrate_homography()
                     _sync_projector_calibration()
+                    _refresh_valid_on_rotation()
 
                     if Project_CV.tile_checked:
                         _handle_tile_checked()

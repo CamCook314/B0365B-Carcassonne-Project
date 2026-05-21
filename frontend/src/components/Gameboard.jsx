@@ -100,7 +100,7 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
                     title={pendingTile ? `Place here: (${g.col}, ${g.row})` : `Valid: (${g.col}, ${g.row})`}
                     onClick={pendingTile ? () => handleGhostClick(g.col, g.row) : undefined}
                   >
-                    <span className="ghost-plus">{pendingTile ? "▶" : "+"}</span>
+                    <span className="ghost-plus">+</span>
                   </div>
                 ))}
 
