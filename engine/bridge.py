@@ -22,6 +22,7 @@ import threading
 import subprocess
 import requests
 import numpy as np
+import webbrowser
 from pathlib import Path
 
 # Make project root and engine dir importable
@@ -407,6 +408,10 @@ def main():
     print("[bridge] Starting Vite dev server...")
     vite_proc = _run_frontend()
     print("Website up on port 5173")
+
+    # Open browser at localhost:5173
+    webbrowser.open("http://localhost:5173")
+    print("[bridge] Opening browser at http://localhost:5173")
 
     print("[bridge] Starting Flask API...")
     threading.Thread(target=_run_api, daemon=True).start()
