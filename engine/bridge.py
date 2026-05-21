@@ -21,6 +21,7 @@ import math
 import threading
 import subprocess
 import requests
+import numpy as np
 from pathlib import Path
 
 # Make project root and engine dir importable
@@ -41,6 +42,104 @@ _CV_PROC_H = 1080
 
 _last_proj_tile_size: float | None = None   # tracks last calibrated value to avoid redundant calls
 _last_proj_angle:     float | None = None   # tracks last calibrated angle
+
+# ── Projector affine auto-calibration ─────────────────────────────────────────
+# After each confirmed tile placement we record the physical correspondence:
+#   cam_pos  — camera-space position of the placed tile (from CV grid globals)
+#   proj_pos — projector pixel we were targeting for that slot at placement time
+# With 3+ non-collinear points we fit a least-squares affine (cam → proj) and
+# derive accurate step vectors, removing the need for manual PROJ_SCALE tuning.
+_proj_cal_points: list = []          # [(cam_pos, proj_pos), ...]
+_affine_mx: "np.ndarray | None" = None   # affine row for x: [m00, m01, m02]
+_affine_my: "np.ndarray | None" = None   # affine row for y: [m10, m11, m12]
+
+
+def _cam_pos_for_grid(gx: int, gy: int) -> tuple:
+    ox, oy = Project_CV.grid_origin
+    ts     = Project_CV.grid_tile_size
+    angle  = Project_CV.grid_angle or 0.0
+    a = ts * math.cos(math.radians(angle))
+    b = ts * math.sin(math.radians(angle))
+    return (ox + gx*a + gy*b, oy + gx*b - gy*a)
+
+
+def _proj_pos_for_grid(gx: int, gy: int) -> tuple:
+    px = projector.proj_origin[0] + gx * projector.proj_a   + gy * projector.proj_b
+    py = projector.proj_origin[1] + gx * projector.proj_b_y - gy * projector.proj_a_y
+    return (round(px), round(py))
+
+
+def _collinear(cam_pts: list) -> bool:
+    """True if all camera points lie on a single line (can't constrain 2D affine)."""
+    if len(cam_pts) < 3:
+        return True
+    (x0, y0), (x1, y1) = cam_pts[0], cam_pts[1]
+    for x, y in cam_pts[2:]:
+        if abs((x1-x0)*(y-y0) - (y1-y0)*(x-x0)) > 100:
+            return False
+    return True
+
+
+def _apply_affine_to_steps():
+    """Derive projector step vectors from the fitted affine and current grid angle."""
+    if _affine_mx is None or _affine_my is None:
+        return
+    ts    = Project_CV.grid_tile_size
+    angle = Project_CV.grid_angle or 0.0
+    if ts is None:
+        return
+    a  = ts * math.cos(math.radians(angle))
+    b  = ts * math.sin(math.radians(angle))
+    mx, my = _affine_mx, _affine_my
+    projector.set_proj_steps(
+        a   = float(mx[0]*a + mx[1]*b),
+        b   = float(mx[0]*b - mx[1]*a),
+        a_y = float(my[1]*a - my[0]*b),
+        b_y = float(my[0]*a + my[1]*b),
+    )
+
+
+def _fit_proj_affine():
+    """Least-squares fit of cam→proj affine from all calibration points."""
+    global _affine_mx, _affine_my
+    cam_pts  = [c for c, _ in _proj_cal_points]
+    proj_pts = [p for _, p in _proj_cal_points]
+    if len(cam_pts) < 3 or _collinear(cam_pts):
+        return
+    A  = np.array([[cx, cy, 1.0] for cx, cy in cam_pts])
+    bx = np.array([float(px) for px, _ in proj_pts])
+    by = np.array([float(py) for _, py in proj_pts])
+    mx, _, _, _ = np.linalg.lstsq(A, bx, rcond=None)
+    my, _, _, _ = np.linalg.lstsq(A, by, rcond=None)
+    _affine_mx, _affine_my = mx, my
+    _apply_affine_to_steps()
+    resid_x = float(np.max(np.abs(A @ mx - bx)))
+    resid_y = float(np.max(np.abs(A @ my - by)))
+    print(f"[bridge] Affine proj calibration — {len(cam_pts)} pts  "
+          f"max residual=({resid_x:.1f}, {resid_y:.1f})px")
+
+
+def _add_proj_cal_point(gx: int, gy: int):
+    """Record a confirmed tile placement as a cam↔proj calibration correspondence."""
+    if Project_CV.grid_origin is None or Project_CV.grid_tile_size is None:
+        return
+    if projector.proj_origin is None or projector.proj_w is None:
+        return
+    cam_pos = _cam_pos_for_grid(gx, gy)
+    # Origin is always anchored to screen centre — don't infer from (possibly
+    # formula-derived) step vectors, which may be wrong before affine converges.
+    proj_pos = ((projector.proj_w // 2, projector.proj_h // 2)
+                if (gx == 0 and gy == 0)
+                else _proj_pos_for_grid(gx, gy))
+    # Skip duplicates (same physical location within 5px)
+    if any(abs(c[0]-cam_pos[0]) < 5 and abs(c[1]-cam_pos[1]) < 5
+           for c, _ in _proj_cal_points):
+        return
+    _proj_cal_points.append((cam_pos, proj_pos))
+    print(f"[bridge] Cal point #{len(_proj_cal_points)}: "
+          f"grid({gx:+d},{gy:+d})  cam=({cam_pos[0]:.0f},{cam_pos[1]:.0f})  "
+          f"proj=({proj_pos[0]},{proj_pos[1]})")
+    _fit_proj_affine()
 
 
 def _sync_projector_calibration():
@@ -64,6 +163,8 @@ def _sync_projector_calibration():
     proj_tile_size_y = round(tile_size * scale_y)   # Y spacing (projector is 16:10, camera is 16:9)
     projector.set_proj_calibration(origin=proj_origin, tile_size=proj_tile_size,
                                    tile_size_y=proj_tile_size_y, angle_deg=angle)
+    # If affine calibration is active, override the formula-based step vectors.
+    _apply_affine_to_steps()
     _last_proj_tile_size = tile_size
     _last_proj_angle     = angle
     print(f"[bridge] Projector calibration updated — origin={proj_origin} (screen centre)"
@@ -212,6 +313,7 @@ def _handle_cv_to_engine():
         projector.clear_proj_valid()
         projector.proj_blank_rendered.wait(timeout=0.5)
         Project_CV.game_response = (True, 1)
+        _add_proj_cal_point(gx, gy)
         _update_remaining_families()
         _save_id_crop_as_game_ref(confirmed_id)
 

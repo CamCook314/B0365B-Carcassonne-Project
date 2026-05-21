@@ -1,12 +1,12 @@
 import { useState, useMemo } from "react";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { rotateTile } from "../api/api";
+import { rotateTile, forcePlace } from "../api/api";
 import "../css/Gameboard.css";
 
 const PLAYER_COLORS = ["#BF616A", "#81A1C1", "#A3BE8C", "#EBCB8B", "#B48EAD"];
 const CELL = 52; // tile size + gap
 
-export default function GameBoard({ tiles = [], meeples = [], validPlacements = [], onTileClick, refresh }) {
+export default function GameBoard({ tiles = [], meeples = [], validPlacements = [], onTileClick, refresh, pendingTile = null }) {
   const [selectedTile, setSelectedTile] = useState(null);
 
   // work out the board bounds and convert tile and ghost grid coords into pixel positions
@@ -52,7 +52,19 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
     console.log("meeples: ", meeples);
   };
 
-  const handleContextMenu = (tile, event) => { 
+  const handleGhostClick = async (col, row) => {
+    if (!pendingTile) return;
+    try {
+      await forcePlace(col, row);
+      console.log(`Force placed at (${col}, ${row})`);
+      refresh?.();
+    } catch (err) {
+      console.error("Force place failed:", err);
+      alert("Could not force place: " + err.message);
+    }
+  };
+
+  const handleContextMenu = (tile, event) => {
     event.preventDefault(); // prevent default right-click menu
     console.log("Right-clicked tile:", tile);
     const rotateLog = rotateTile(tile.col, tile.row)
@@ -81,8 +93,14 @@ export default function GameBoard({ tiles = [], meeples = [], validPlacements = 
 
                 {/* Ghost tiles to show valid placements */}
                 {ghostTiles.map(g => (
-                  <div key={`g-${g.col},${g.row}`} className="tile tile-ghost" style={{ left: g.left, top: g.top }} title={`Valid: (${g.col}, ${g.row})`}>
-                    <span className="ghost-plus">+</span>
+                  <div
+                    key={`g-${g.col},${g.row}`}
+                    className={`tile tile-ghost${pendingTile ? " tile-ghost-clickable" : ""}`}
+                    style={{ left: g.left, top: g.top, cursor: pendingTile ? "pointer" : "default" }}
+                    title={pendingTile ? `Place here: (${g.col}, ${g.row})` : `Valid: (${g.col}, ${g.row})`}
+                    onClick={pendingTile ? () => handleGhostClick(g.col, g.row) : undefined}
+                  >
+                    <span className="ghost-plus">{pendingTile ? "▶" : "+"}</span>
                   </div>
                 ))}
 

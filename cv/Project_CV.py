@@ -44,6 +44,7 @@ last_placed_crop_path  = None    # Path to the most recently saved placed-slot c
 valid_placements       = None    # Bridge sets from /pending response: set of (gx, gy) coords valid for the current tile
 tile_blob_area         = None    # Area of the origin tile blob in proc pixels; used as dynamic area filter reference
 proj_clear_requested   = False   # CV sets when a tile is confirmed; bridge clears projection and resets this
+placement_override     = None    # Set by /force_place API: (gx, gy) to use as confirmed slot on next growth event
 
 
 _SIDE_VECTORS = {
@@ -262,9 +263,9 @@ def cv_main_loop():
     # --- Board growth / removal detection ---
     BOARD_GROWTH_THRESHOLD  = 1000   # Min pixel area increase to count as growth
     SAT_GROWTH_THRESHOLD    = 500    # Min new saturation pixels inside board (catches centre tiles)
-    GROWTH_CONFIRM_FRAMES     = 15   # Consecutive frames of growth needed to commit    (~1s at 30fps)
+    GROWTH_CONFIRM_FRAMES     = 40   # Consecutive frames of growth needed to commit    (~1s at 30fps)
     REMOVAL_CONFIRM_FRAMES    = 25   # Consecutive frames of shrinkage to confirm removal (~1.3s)
-    PLACEMENT_COOLDOWN_FRAMES = 40  # Frames to ignore growth after identification (~4s); lets player move tile
+    PLACEMENT_COOLDOWN_FRAMES = 60  # Frames to ignore growth after identification (~4s); lets player move tile
 
     # --- Tile identification stability ---
     TILE_CONFIRM_FRAMES = 40   # Frames the unplaced tile must stay still before saving (~1.3s at 30fps)
@@ -323,7 +324,7 @@ def cv_main_loop():
     # the growth counter, so one flickering frame doesn't undo 2+ growth frames.
     non_growth_count = 0
 
-    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, valid_meeple_sides, last_id_crop_path, last_placed_crop_path, valid_placements, tile_blob_area, proj_clear_requested
+    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, valid_meeple_sides, last_id_crop_path, last_placed_crop_path, valid_placements, tile_blob_area, proj_clear_requested, placement_override
 
     print("Place the first tile on the board — it will be detected automatically. Press 'b' to force-confirm.")
 
@@ -551,7 +552,80 @@ def cv_main_loop():
 
             # ── Phase 2: wait for board blob to grow ──────────────────────────
             elif phase == WAIT_PLACEMENT:
-                if placement_cooldown > 0:
+                # ── Immediate manual placement override from frontend click ──
+                # Fires right away without needing growth detection.
+                if placement_override is not None and grid_tracker is not None:
+                    _ov_slot       = placement_override
+                    placement_override = None
+                    _ov_valid = (valid_placements is None or _ov_slot in valid_placements)
+                    if not _ov_valid:
+                        print(f"  Grid: manual override {_ov_slot} not in valid positions — ignored")
+                    else:
+                        print(f"  Grid: manual placement override → {_ov_slot} (immediate)")
+                        grid_tracker.snapshot()
+                        rollback_prev_board_area   = prev_board_area
+                        rollback_prev_sat_area     = prev_sat_area
+                        rollback_last_coord        = last_placed_coord
+                        rollback_stable_board_mask = stable_board_mask.copy() \
+                            if stable_board_mask is not None else None
+                        slot_px = grid_tracker.grid_to_px(*_ov_slot)
+                        # Use current board contour as new stable mask.
+                        if new_board_cnt is not None:
+                            _ov_mask = np.zeros(blobs.shape, dtype=np.uint8)
+                            cv.drawContours(_ov_mask, [new_board_cnt], -1, 255, -1)
+                        elif stable_board_mask is not None:
+                            _ov_mask = stable_board_mask.copy()
+                        else:
+                            _ov_mask = np.zeros(blobs.shape, dtype=np.uint8)
+                        stable_board_mask  = _ov_mask.copy()
+                        prev_board_area    = cv.countNonZero(_ov_mask)
+                        prev_sat_area      = cv.countNonZero(
+                            cv.bitwise_and(sat_blobs, _ov_mask))
+                        tile_saved            = False
+                        proj_clear_requested  = True
+                        phase                 = WAIT_MEEPLE
+                        meeple_frame_count    = 0
+                        meeple_detect_count   = 0
+                        meeple_skip_count     = 0
+                        candidate_meeple_dir    = None
+                        candidate_meeple_colour = None
+                        meeple_baseline       = proc_frame.copy()
+                        growth_frame_count    = 0
+                        non_growth_count      = 0
+                        candidate_board_cnt   = None
+                        pre_growth_mask       = None
+                        # Grid-predicted centre — no diff centroid for override path.
+                        refit_cx = float(slot_px[0])
+                        refit_cy = float(slot_px[1])
+                        grid_tracker.confirm_placement(_ov_slot, refit_cx, refit_cy)
+                        grid_origin    = (int(grid_tracker.origin_px[0]),
+                                          int(grid_tracker.origin_px[1]))
+                        grid_tile_size = grid_tracker.tile_size_px
+                        grid_angle     = float(np.degrees(
+                            np.arctan2(grid_tracker.b, grid_tracker.a)))
+                        last_placed_coord = _ov_slot
+                        refitted_px = grid_tracker.grid_to_px(*_ov_slot)
+                        print(f"Tile placed at grid {_ov_slot} (manual override).")
+                        _oslots = grid_tracker.open_slots()
+                        print(f"  [open-slots] origin=({grid_tracker.origin_px[0]:.0f},"
+                              f"{grid_tracker.origin_px[1]:.0f})"
+                              f"  a={grid_tracker.a:.2f}  b={grid_tracker.b:.2f}"
+                              f"  tile_size={grid_tracker.tile_size_px:.1f}px"
+                              f"  angle={grid_angle:.1f}°")
+                        for _s in sorted(_oslots):
+                            _pt = grid_tracker.grid_to_px(*_s)
+                            print(f"  [open-slots]   {_s} → PROC px "
+                                  f"({_pt[0]:.0f},{_pt[1]:.0f})")
+                        pending_family_id        = (tile_id_override
+                                                    if tile_id_override is not None
+                                                    else tile_id)
+                        tile_id_override         = None
+                        pending_refitted_px      = refitted_px
+                        pending_validated_center = None
+                        rotation_pending         = True
+                        print(f"Placement confirmed at {_ov_slot} — "
+                              f"rotation detection deferred to settle period.")
+                elif placement_cooldown > 0:
                     placement_cooldown -= 1
                     remaining_cd = placement_cooldown
                     cv.putText(result, f"Move tile to board ({remaining_cd} frames)...",
@@ -632,6 +706,14 @@ def cv_main_loop():
                                       f"origin=({grid_tracker.origin_px[0]:.0f},"
                                       f"{grid_tracker.origin_px[1]:.0f})")
 
+                            # Print every open slot with its camera pixel position so the
+                            # terminal output can be compared against the camera feed.
+                            print(f"  [open-slot-px] {len(list(grid_tracker.open_slots()))} open slots:")
+                            for _sl in sorted(grid_tracker.open_slots()):
+                                _slx, _sly = grid_tracker.grid_to_px(*_sl)
+                                _mark = " ← VALID" if (valid_placements and _sl in valid_placements) else ""
+                                print(f"    {_sl} → cam=({_slx:.0f},{_sly:.0f}){_mark}")
+
                             # Primary slot detection: saturation-filtered coverage per slot.
                             # sat_in_diff = sat_blobs & diff_mask — keeps only real tile pixels.
                             # MORPH_CLOSE halos are empty table surface (zero saturation) so they
@@ -683,6 +765,18 @@ def cv_main_loop():
                                     print(f"  Coverage ambiguous ({top_cov} vs "
                                           f"{second_cov} {label}-px, {margin:.0%} margin)"
                                           f" — retrying.")
+                                    # Per-slot scores for diagnosis
+                                    if diff_cx is not None:
+                                        print(f"  [slot-scores] diff_centroid=({diff_cx:.0f},{diff_cy:.0f})")
+                                    for _dbg_s in sorted(grid_tracker.open_slots()):
+                                        _dbg_sx, _dbg_sy = grid_tracker.grid_to_px(*_dbg_s)
+                                        _dbg_sat  = grid_tracker.cell_coverage(sat_in_diff, *_dbg_s)
+                                        _dbg_diff = grid_tracker.cell_coverage(diff_mask, *_dbg_s)
+                                        _dbg_dist = (float(np.hypot(_dbg_sx - diff_cx, _dbg_sy - diff_cy))
+                                                     if diff_cx is not None else -1)
+                                        print(f"    slot {_dbg_s}: sat={_dbg_sat}  diff={_dbg_diff}"
+                                              f"  cam=({_dbg_sx:.0f},{_dbg_sy:.0f})"
+                                              f"  dist={_dbg_dist:.0f}px")
                                     best_slot = None
                                 else:
                                     print(f"  Grid: best slot → {best_slot} "
@@ -697,6 +791,20 @@ def cv_main_loop():
                                     print(f"  Grid: slot {best_slot} rejected — not in engine's "
                                           f"{len(valid_placements)} valid positions.")
                                     best_slot = None
+
+                            # Final fallback: manual placement override from frontend click.
+                            # Used when auto-detection is ambiguous or the slot was rejected.
+                            if best_slot is None and placement_override is not None:
+                                _ov = placement_override
+                                placement_override = None
+                                if valid_placements is None or _ov in valid_placements:
+                                    best_slot = _ov
+                                    top_cov   = 0
+                                    used_sat  = False
+                                    print(f"  Grid: manual placement override → {best_slot}")
+                                else:
+                                    print(f"  Grid: manual override {_ov} rejected — "
+                                          f"not in valid positions")
 
                             # Diagnostic only: log if the raw diff centroid and coverage
                             # disagree, but do NOT reject on that basis.

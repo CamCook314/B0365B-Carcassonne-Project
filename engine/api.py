@@ -484,6 +484,38 @@ def clear_pending():
     return jsonify({"status": "ok"})
 
 
+@app.route('/force_place', methods=['POST'])
+def force_place():
+    """Frontend click-to-place: set a manual placement override so CV uses this slot
+    on the next growth confirmation event instead of trying to auto-detect.
+
+    Body: {"x": int, "y": int}
+    Position must be in the current pending_valid list.
+    """
+    if game_state is None:
+        return jsonify({"error": "Game not started"}), 400
+    if pending_tile is None:
+        return jsonify({"error": "No pending tile"}), 400
+
+    data = request.get_json() or {}
+    x = data.get("x")
+    y = data.get("y")
+    if x is None or y is None:
+        return jsonify({"error": "Missing x or y"}), 400
+
+    valid_coords = {(px, py) for px, py, _ in pending_valid}
+    if (x, y) not in valid_coords:
+        return jsonify({"error": f"({x},{y}) not in valid placements"}), 400
+
+    try:
+        from cv import Project_CV
+        Project_CV.placement_override = (x, y)
+        print(f"[api] force_place: placement_override set to ({x},{y})")
+        return jsonify({"status": "ok", "override": [x, y]})
+    except ImportError:
+        return jsonify({"error": "CV module not available"}), 503
+
+
 @app.route('/place', methods=['POST'])
 def place_tile():
     global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement
@@ -524,7 +556,6 @@ def place_tile():
     tile_bag_instance.remove_tile(placed_tile_id)
     projector.clear_proj_valid() # Clear projector valid tiles
     projector.clear_invalid()
-    projector.set_valid()
 
     pending_tile = None
     pending_valid = []

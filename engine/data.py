@@ -160,7 +160,7 @@ class gameStateClass:
 
 				if (randx, randy) not in [e.coords for e in self.event_pool] and (randx, randy) not in self.river_struct: #unique coords
 					self.event_pool.append(Event((randx, randy)))
-					print(Event((randx, randy)))
+					print(f"[event_init] Event tile spawned at ({randx},{randy})")
 					projector.add_img("EVENT", (randx, randy))
 					break
 	
@@ -244,7 +244,8 @@ class gameStateClass:
 				projector.del_img("EVENT", (x, y))
 				event.play(self)
 
-		self.good_tile_bad_tile(tile, x, y)
+		if len(self.river_struct) >= 12:
+			self.good_tile_bad_tile(tile, x, y)
 		
 
 

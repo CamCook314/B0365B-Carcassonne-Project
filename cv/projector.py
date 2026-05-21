@@ -113,6 +113,15 @@ def set_proj_calibration(origin=None, tile_size=None, tile_size_y=None, angle_de
     proj_a_y = proj_tile_size_y * cos_θ
     proj_b_y = proj_tile_size_y * sin_θ
 
+
+def set_proj_steps(a, b, a_y, b_y):
+    """Override the step vectors directly — used by affine auto-calibration in bridge."""
+    global proj_a, proj_b, proj_a_y, proj_b_y
+    proj_a   = a
+    proj_b   = b
+    proj_a_y = a_y
+    proj_b_y = b_y
+
 ## IMAGE DICTIONARY LOCK
 img_lock = threading.Lock()
 
@@ -126,38 +135,34 @@ for key in img_keys:
 
 # Function that adds an event to the dictionary
 def add_img(img, coord):
-    add_img = True
+    _add = True
     with img_lock:
         # Check if key is in event keys
-        if img in img_keys:   
+        if img in img_keys:
             # Check there isn't an event already at the same coords
             for key in img_keys:
                 values = img_dict[key]
                 if coord in values:
-                    add_img = False
+                    _add = False
         # Add event if nothing is at the coords
-        if add_img:
+        if _add:
             if isinstance(coord, tuple):
-                # Add a single coord
                 img_dict[img].add(coord)
             else:
-                # Adds a set of coords
                 img_dict[img].update(coord)
+    if _add:
+        print(f"[PROJECTOR] >>> add_img: {img} at {coord}")
 
-# Function that removes an event from the dictionary     
+# Function that removes an event from the dictionary
 def del_img(img, coord):
-    # Taking the lock
     with img_lock:
-        # Check if is an event key
         if img in img_keys:
-            # Is not a set of coordinates
             if img != "UNREST":
-                # Remove coord value
                 if img in img_dict:
                     img_dict[img].discard(coord)
             else:
-                # Remove whole entry
                 img_dict.pop(img, None)
+    print(f"[PROJECTOR] >>> del_img: {img} at {coord}")
 
 ## START UP FUNCTION
 def startup(canvas, centre_x, centre_y):
@@ -190,12 +195,14 @@ def set_invalid():
     global invalid_border
     with invalid_lock:
         invalid_border = True
+    print("[PROJECTOR] >>> Invalid border ON")
 
 # Function that clears the invalid move border flag
 def clear_invalid():
     global invalid_border
     with invalid_lock:
         invalid_border = False
+    print("[PROJECTOR] >>> Invalid border OFF")
 
 # Function that draws the invalid move border
 def set_invalid_border(canvas, width, height):
@@ -204,17 +211,19 @@ def set_invalid_border(canvas, width, height):
     cv.rectangle(canvas, (0, 0), (width - 1, height - 1), colour, thickness)
     return canvas
 
-# Function that seets the valid move border flag
+# Function that sets the valid move border flag
 def set_valid():
     global valid_border
     with valid_b_lock:
         valid_border = True
+    print("[PROJECTOR] >>> Valid border ON")
 
 # Function that clears the valid move border flag
 def clear_valid():
     global valid_border
     with valid_b_lock:
         valid_border = False
+    print("[PROJECTOR] >>> Valid border OFF")
 
 # Function that draws the valid move border
 def set_valid_border(canvas, width, height):
@@ -228,12 +237,14 @@ def set_event():
     global event_border
     with event_lock:
         event_border = True
+    print("[PROJECTOR] >>> Event border ON")
 
 # Function that clears the event border flag
 def clear_event():
     global event_border
     with event_lock:
         event_border = False
+    print("[PROJECTOR] >>> Event border OFF")
 
 # Function the draws the event border
 def set_event_border(canvas, width, height):
@@ -242,13 +253,14 @@ def set_event_border(canvas, width, height):
     cv.rectangle(canvas, (0, 0), (width - 1, height - 1), colour, thickness)
     return canvas
 
-# Function that sets the valid placement flag and 
+# Function that sets the valid placement flag and coords
 def set_proj_valid(coords):
     global valid_flag
     global valid_tiles
     with valid_lock:
         valid_flag = True
         valid_tiles = coords
+    print(f"[PROJECTOR] >>> Valid placements ON: {len(coords)} positions {sorted(coords)}")
 
 # Function that clears the valid tile flags and reset tile coords
 def clear_proj_valid():
@@ -258,6 +270,7 @@ def clear_proj_valid():
         valid_flag = False
         valid_tiles = None
     proj_blank_rendered.clear()  # projector hasn't rendered the blank frame yet
+    print("[PROJECTOR] >>> Valid placements cleared")
 
 # Function to display all valid tile placement locations for a tile.
 # Draws a hollow magenta outline slightly larger than the tile so the projector

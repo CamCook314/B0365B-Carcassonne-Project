@@ -157,6 +157,19 @@ export async function rotateTile(col, row) {
 }
 
 
+export async function forcePlace(x, y) {
+  const res = await fetch(`${BASE_URL}/force_place`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ x, y }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `force_place failed (${res.status})`);
+  }
+  return res.json();
+}
+
 export async function clearNotification() {
   const res = await fetch(`${BASE_URL}/notify/clear`, { method: "POST" });
   if (!res.ok) {
