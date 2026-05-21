@@ -65,13 +65,13 @@ function findNewTiles(history) {
 function convertPlayerToColour(playerIndex) {
     switch (playerIndex) {
         case 0:
-            return "🟥"
+            return "🟨"
         case 1:
             return "🟦"
         case 2:
             return "🟩"
         case 3:
-            return "🟨"
+            return "🟥"
         case 4:
             return "🟪"
     }
@@ -80,13 +80,13 @@ function convertPlayerToColour(playerIndex) {
 export function convertPlayerToColourMeeple(playerIndex) {
     switch (playerIndex) {
         case 0:
-            return "🔴"
+            return "🟡"
         case 1:
             return "🔵"
         case 2:
             return "🟢"
         case 3:
-            return "🟡"
+            return "🔴"
         case 4:
             return "🟣"
     }

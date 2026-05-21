@@ -617,7 +617,7 @@ def place_meeple():
         return jsonify({"error": f"Invalid direction: {direction}"}), 400
 
     colour = data.get("colour")
-    COLOURS = ["red", "blue", "green", "yellow", "black"]
+    COLOURS = ["yellow", "blue", "green", "red", "black"]
     colour_int = None
     if colour is not None:
         if colour not in COLOURS:
