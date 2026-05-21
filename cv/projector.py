@@ -15,13 +15,17 @@ import threading
 _CFG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 PROJ_OFFSET_X = 0
 PROJ_OFFSET_Y = 0
+PROJ_SCALE    = 1.0
 if os.path.exists(_CFG_PATH):
     with open(_CFG_PATH) as _f:
         _pcfg = json.load(_f)
     PROJ_OFFSET_X = _pcfg.get("PROJ_OFFSET_X", 0)
     PROJ_OFFSET_Y = _pcfg.get("PROJ_OFFSET_Y", 0)
+    PROJ_SCALE    = _pcfg.get("PROJ_SCALE", 1.0)
 if PROJ_OFFSET_X or PROJ_OFFSET_Y:
     print(f"[projector] Manual offset from config: dx={PROJ_OFFSET_X}  dy={PROJ_OFFSET_Y}")
+if PROJ_SCALE != 1.0:
+    print(f"[projector] Tile scale from config: {PROJ_SCALE}")
 
 # Display FLAG
 projector_display = threading.Event()
@@ -51,7 +55,7 @@ proj_blank_rendered.set()  # starts "clear" — no projection showing at startup
 ## PROJECTOR DISPLAY INDEX
 # 0 = primary monitor, 1 = first extended display, 2 = second, etc.
 # Run once to see all detected monitors printed at startup, then set this.
-PROJECTOR_INDEX = 1
+PROJECTOR_INDEX = 3
 
 ## TILE SIZE
 TILE_SIZE = 65
@@ -96,9 +100,9 @@ def set_proj_calibration(origin=None, tile_size=None, tile_size_y=None, angle_de
     if origin is not None:
         proj_origin      = (origin[0] + PROJ_OFFSET_X, origin[1] + PROJ_OFFSET_Y)
     if tile_size is not None:
-        proj_tile_size   = tile_size
+        proj_tile_size   = tile_size * PROJ_SCALE
     if tile_size_y is not None:
-        proj_tile_size_y = tile_size_y
+        proj_tile_size_y = tile_size_y * PROJ_SCALE
     if angle_deg is not None:
         proj_angle_deg   = angle_deg
     θ      = math.radians(proj_angle_deg)

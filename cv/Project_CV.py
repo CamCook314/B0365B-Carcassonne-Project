@@ -594,6 +594,27 @@ def cv_main_loop():
                             cv.drawContours(new_mask, [candidate_board_cnt], -1, 255, -1)
                             diff_mask = cv.subtract(new_mask, pre_growth_mask) \
                                         if pre_growth_mask is not None else new_mask
+
+                            # Clip diff to the expected board region: open slots + existing
+                            # board area.  When the player's arm extends away from the board
+                            # during placement, the filled candidate_board_cnt can cover a
+                            # huge interior region (arm-to-tile polygon fill) that contaminates
+                            # slot coverage scores — particularly spreading coverage into
+                            # intermediate open slots and failing the margin check.
+                            if grid_tracker is not None:
+                                _rgn = np.zeros_like(diff_mask)
+                                _r   = int(grid_tracker.tile_size_px)
+                                for _slot in grid_tracker.open_slots():
+                                    _sx, _sy = grid_tracker.grid_to_px(*_slot)
+                                    _sx, _sy = int(_sx), int(_sy)
+                                    _rgn[max(0, _sy-_r):min(_rgn.shape[0], _sy+_r),
+                                         max(0, _sx-_r):min(_rgn.shape[1], _sx+_r)] = 255
+                                if stable_board_mask is not None:
+                                    _rgn = cv.bitwise_or(_rgn, stable_board_mask)
+                                _clipped = cv.bitwise_and(diff_mask, _rgn)
+                                if cv.countNonZero(_clipped) > 0:
+                                    diff_mask = _clipped
+
                             diff_total = cv.countNonZero(diff_mask)
                             new_total  = cv.countNonZero(new_mask)
                             pre_total  = cv.countNonZero(pre_growth_mask) if pre_growth_mask is not None else 0
