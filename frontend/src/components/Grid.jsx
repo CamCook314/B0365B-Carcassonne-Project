@@ -33,7 +33,7 @@ export default function Grid({
         currentPlayer={currentPlayer}
         players={players}
       />
-      <ActivityLog history={history} />
+      <ActivityLog history={history} players={players} />
     </div>
     
 
@@ -43,7 +43,8 @@ export default function Grid({
         tiles={boardTiles}
         meeples={meeples}
         validPlacements={validPlacements}
-        onTileClick={(tile) => console.log("Clicked:", tile)} 
+        onTileClick={(tile) => console.log("Clicked:", tile)}
+        pendingTile={pendingTile}
         refresh={refresh}
       />
 
