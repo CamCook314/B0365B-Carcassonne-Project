@@ -133,3 +133,14 @@
 
 .tile-popup-body div { margin-bottom: 3px; }
 .tile-popup-body strong { color: var(--dim); font-weight: 500; margin-right: 4px; }
+
+/* Ghost tile hover highlight when a tile is pending (click-to-place active) */
+.tile-ghost-clickable:hover {
+  border-color: #88c0d0;
+  background: rgba(136, 192, 208, 0.18);
+  transform: scale(1.12);
+  z-index: 10;
+}
+.tile-ghost-clickable .ghost-plus {
+  color: #88c0d0;
+}

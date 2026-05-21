@@ -160,9 +160,11 @@ class gameStateClass:
 
 				if (randx, randy) not in [e.coords for e in self.event_pool] and (randx, randy) not in self.river_struct: #unique coords
 					self.event_pool.append(Event((randx, randy)))
-					print(Event((randx, randy)))
+					print(f"[event_init] Event tile spawned at ({randx},{randy})")
 					projector.add_img("EVENT", (randx, randy))
 					break
+		all_coords = [e.coords for e in self.event_pool]
+		print(f"[event_init] River complete — {len(all_coords)} event tiles spawned: {all_coords}")
 	
 	#for 3 turns after its placed, every turn the tile has a 5% chance to either turn good or bad, effects are permanent
 	def good_tile_bad_tile(self, tile,x, y): #runs every turn
@@ -241,10 +243,12 @@ class gameStateClass:
 		tile.player_placed = self.current_player()
 		for event in self.event_pool:
 			if event.coords == (x, y):
+				print(f"[event] Tile placed ON event at ({x},{y}) — triggering event!")
 				projector.del_img("EVENT", (x, y))
 				event.play(self)
 
-		self.good_tile_bad_tile(tile, x, y)
+		if len(self.river_struct) >= 12:
+			self.good_tile_bad_tile(tile, x, y)
 		
 
 

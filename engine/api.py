@@ -58,6 +58,8 @@ pending_candidates = []      # ranked list of tile_id strings from CV top-N matc
 pending_placement = None     # {"x", "y", "tile_id", "tile"} — set by /place, cleared by /meeple or /meeple/skip
 game_over = False            # flipped True by /end after final scoring
 pending_notification = None  # Swal payload set by /notify, cleared by /notify/clear
+board_rotation_seq   = 0     # incremented on every /rotate call so bridge can detect changes
+_force_override      = False # set by /force_place to bypass position validity in /place
 
 # ── Notification type definitions ────────────────────────────────────────────
 # Each entry maps to a SweetAlert2 options dict.
@@ -484,9 +486,40 @@ def clear_pending():
     return jsonify({"status": "ok"})
 
 
+@app.route('/force_place', methods=['POST'])
+def force_place():
+    """Frontend click-to-place: set a manual placement override so CV uses this slot
+    on the next growth confirmation event instead of trying to auto-detect.
+
+    Body: {"x": int, "y": int}
+    When the player clicks a position manually they are deliberately overriding
+    both CV detection and engine validity — no position check is applied here.
+    """
+    global _force_override
+    if game_state is None:
+        return jsonify({"error": "Game not started"}), 400
+    if pending_tile is None:
+        return jsonify({"error": "No pending tile"}), 400
+
+    data = request.get_json() or {}
+    x = data.get("x")
+    y = data.get("y")
+    if x is None or y is None:
+        return jsonify({"error": "Missing x or y"}), 400
+
+    try:
+        from cv import Project_CV
+        Project_CV.placement_override = (x, y)
+        _force_override = True
+        print(f"[api] force_place: placement_override set to ({x},{y}) [force]")
+        return jsonify({"status": "ok", "override": [x, y]})
+    except ImportError:
+        return jsonify({"error": "CV module not available"}), 503
+
+
 @app.route('/place', methods=['POST'])
 def place_tile():
-    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement
+    global game_state, tile_bag_instance, pending_tile, pending_valid, pending_candidates, pending_placement, _force_override
 
     if game_state is None:
         return jsonify({"error": "Game not started"}), 400
@@ -502,10 +535,26 @@ def place_tile():
     rotation_id = data.get("rotation_id")
     placed_tile_id = None
     valid_at_pos = [rid for px, py, rid in pending_valid if px == x and py == y]
-    if not valid_at_pos:
+
+    forced = _force_override
+    _force_override = False  # consume immediately so it doesn't bleed into future calls
+
+    if not valid_at_pos and not forced:
         projector.set_invalid()
         return jsonify({"error": "Invalid placement position"}), 400
-    if rotation_id is not None:
+
+    if forced and not valid_at_pos:
+        # No engine-computed valid rotation for this position — use CV's rotation
+        # directly (or the first rotation of the pending tile family as fallback).
+        if rotation_id is not None and rotation_id in tile_set:
+            placed_tile_id = rotation_id
+            print(f"[place] Force override — using CV rotation {rotation_id} at ({x},{y})")
+        elif pending_tile is not None:
+            placed_tile_id = pending_tile.tile_id
+            print(f"[place] Force override — using pending tile {placed_tile_id} at ({x},{y})")
+        else:
+            return jsonify({"error": "No pending tile for force placement"}), 400
+    elif rotation_id is not None:
         if rotation_id in valid_at_pos:
             placed_tile_id = rotation_id
         else:
@@ -524,7 +573,6 @@ def place_tile():
     tile_bag_instance.remove_tile(placed_tile_id)
     projector.clear_proj_valid() # Clear projector valid tiles
     projector.clear_invalid()
-    projector.set_valid()
 
     pending_tile = None
     pending_valid = []
@@ -574,6 +622,9 @@ def rotate_tile():
 
     if tile is None:
         return jsonify({"error": f"No tile found at ({x}, {y})"}), 400
+
+    global board_rotation_seq
+    board_rotation_seq += 1
 
     # rotate the tile
     current_tile = tile.tile_id
