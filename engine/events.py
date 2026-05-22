@@ -1,3 +1,4 @@
+"""Defines the random game events (extra turn, volcano, unrest) that trigger during play."""
 import random
 import sys
 import os

@@ -1,3 +1,4 @@
+"""Tile dataclass representing a single Carcassonne tile and its edge connectors."""
 class tile:
 
 	# Constructor for each tile object. up, down left and right

@@ -1,3 +1,9 @@
+/**
+ * ActivityLog — scrollable card showing recent tile placements.
+ * Diffs consecutive game history snapshots to detect newly placed tiles,
+ * then renders each as a row with the placing player's colour emoji, a tile
+ * thumbnail, its board position, and a meeple indicator if one was placed.
+ */
 import { getHistory } from "../api/api";
 import { PLAYER_COLOURS } from "../constants/config";
 

@@ -1,3 +1,9 @@
+/**
+ * ActiveEvents — panel card showing currently active game events.
+ * Renders a lock message while the river phase is incomplete, an empty state
+ * when no events are active, and a labelled list of events (with the player
+ * colour they apply to) once events are running.
+ */
 export default function ActiveEvents({
   events,
   players,

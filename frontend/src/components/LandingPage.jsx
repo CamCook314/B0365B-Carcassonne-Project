@@ -1,3 +1,9 @@
+/**
+ * LandingPage — informational page shown before a game starts.
+ * Contains a hero section with player-count start buttons and a pill-tab
+ * navigation system with panels for: About the Project, How to Play,
+ * Terrain Types, Scoring, Characters, and Special Events.
+ */
 import { useState } from "react";
 import "../css/LandingPage.css";
 

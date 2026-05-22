@@ -1,3 +1,9 @@
+/**
+ * MeeplePlacer — card for the meeple placement decision after a tile is placed.
+ * Shows the tile ID and position, the current player's colour and meeple count,
+ * and buttons for each valid side (up/down/left/right/centre). Includes a Skip
+ * button for passing without placing, and a warning when no meeples remain.
+ */
 import { placeMeeple, skipMeeple } from "../api/api.js";
 import { PLAYER_COLOUR_MAP } from "../constants/config";
 

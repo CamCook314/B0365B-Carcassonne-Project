@@ -1,3 +1,4 @@
+"""Flask REST API server that bridges the frontend and CV system to the game engine."""
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 

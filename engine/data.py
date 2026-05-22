@@ -1,3 +1,4 @@
+"""Core game state: player classes with unique abilities, board management, and structure tracking."""
 from tile_set import tile_set
 from tile import tile
 from events import Event

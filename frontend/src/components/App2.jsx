@@ -1,3 +1,9 @@
+/**
+ * App2 — root application component.
+ * Polls game state via useGameState and routes between LandingPage,
+ * LoadingScreen, EndScreen, and the main game view (Header + Grid) based
+ * on the current state. Also handles starting a new game.
+ */
 import { useState, useEffect } from "react";
 import { getGameState, startGame, getHistory } from "../api/api";
 import { POLLING_INTERVAL } from "../constants/config";

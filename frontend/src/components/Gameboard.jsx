@@ -1,3 +1,11 @@
+/**
+ * Gameboard — zoomable, pannable board rendering component.
+ * Converts tile coordinate data into pixel positions, draws placed tiles as
+ * images, overlays colour-coded meeple dots by side, and shows "+" ghost
+ * markers at valid placement positions. Ghost markers are clickable when a
+ * pending tile is detected, triggering a force-place. Right-click on any
+ * placed tile rotates it via the API.
+ */
 import { useState, useMemo } from "react";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { rotateTile, forcePlace } from "../api/api";
