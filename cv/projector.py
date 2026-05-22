@@ -305,6 +305,8 @@ def tile_grid_points(grid_origin, _grid_tile_size, tile_coord, img_size, _tile_s
         cam_x = _cam_origin[0] + gx * _cam_a + gy * c
         cam_y = _cam_origin[1] + gx * _cam_b + gy * d
         tile_origin_x, tile_origin_y = cam_to_proj(cam_x, cam_y)
+        tile_origin_x += PROJ_OFFSET_X
+        tile_origin_y += PROJ_OFFSET_Y
     else:
         tile_origin_x = round(grid_origin[0] + gx * proj_a   + gy * proj_b)
         tile_origin_y = round(grid_origin[1] + gx * proj_b_y - gy * proj_a_y)
@@ -329,7 +331,7 @@ def clear_invalid():
 
 # Function that draws the invalid move border
 def set_invalid_border(canvas, width, height):
-    colour = (255, 0, 255) # Magenta — filtered by blob_pipeline's proj_magenta mask
+    colour = (0, 165, 255)  # Orange — filtered by blob_pipeline's proj_orange mask
     thickness = 10
     cv.rectangle(canvas, (0, 0), (width - 1, height - 1), colour, thickness)
     return canvas
@@ -371,7 +373,7 @@ def clear_event():
 
 # Function the draws the event border
 def set_event_border(canvas, width, height):
-    colour = (255, 0, 255) # Magenta — filtered by blob_pipeline's proj_magenta mask
+    colour = (255, 0, 0)  # Blue — filtered by blob_pipeline's proj_blue mask
     thickness = 10
     cv.rectangle(canvas, (0, 0), (width - 1, height - 1), colour, thickness)
     return canvas
@@ -542,18 +544,18 @@ def projector_main():
                         canvas = event_bad_tile(canvas, proj_origin, proj_tile_size, value)
                     elif key == "GOOD_TILE":
                         canvas = event_good_tile(canvas, proj_origin, proj_tile_size, value)
-            # Check for displaying the valid tile placement border
-            with valid_b_lock:
-                if valid_border:
-                    canvas = set_valid_border(canvas, proj_w, proj_h)
-            # Check for displaying the invalid tile placement border
-            with invalid_lock:
-                if invalid_border:
-                    canvas = set_invalid_border(canvas, proj_w, proj_h)
-            # Check for displaying the event has occured border
+            # Always draw a border — colour indicates current game state.
+            # Priority: event (blue) > invalid (orange) > default (magenta).
             with event_lock:
-                if event_border:
-                    canvas = set_event_border(canvas, proj_w, proj_h)
+                _border_event = event_border
+            with invalid_lock:
+                _border_invalid = invalid_border
+            if _border_event:
+                canvas = set_event_border(canvas, proj_w, proj_h)
+            elif _border_invalid:
+                canvas = set_invalid_border(canvas, proj_w, proj_h)
+            else:
+                canvas = set_valid_border(canvas, proj_w, proj_h)
             # Check for displaying all posible valid moves for the given tile
             with valid_lock:
                 showing_valid = valid_flag

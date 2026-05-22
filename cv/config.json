@@ -4,8 +4,8 @@
   "DENSITY_THRESHOLD": 7,
   "SAT_THRESHOLD": 107,
   "MORPH_CLOSE_KERNEL": 85,
-  "PROJ_OFFSET_X": 0,
-  "PROJ_OFFSET_Y": 0,
+  "PROJ_OFFSET_X": 59,
+  "PROJ_OFFSET_Y": -82,
   "PROJ_SCALE": 1.1,
   "homography_matrix": [
     1.0038889482691746,

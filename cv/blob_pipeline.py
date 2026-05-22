@@ -67,12 +67,19 @@ def process_frame(frame, sat_threshold=SAT_THRESHOLD):
     edge_blobs[proj_magenta > 0] = 0
     sat_blobs[proj_magenta > 0]  = 0
 
-    # Suppress projected orange event tiles (BGR 0,165,255 → HSV H≈20).
+    # Suppress projected orange event tiles and invalid border (BGR 0,165,255 → HSV H≈20).
     proj_orange = cv.inRange(hsv, (8, 60, 60), (28, 255, 255))
     proj_orange = cv.dilate(proj_orange,
                             cv.getStructuringElement(cv.MORPH_RECT, (5, 5)))
     edge_blobs[proj_orange > 0] = 0
     sat_blobs[proj_orange > 0]  = 0
+
+    # Suppress projected blue event border (BGR 255,0,0 → HSV H≈120).
+    proj_blue = cv.inRange(hsv, (100, 60, 60), (140, 255, 255))
+    proj_blue = cv.dilate(proj_blue,
+                          cv.getStructuringElement(cv.MORPH_RECT, (5, 5)))
+    edge_blobs[proj_blue > 0] = 0
+    sat_blobs[proj_blue > 0]  = 0
 
     blobs   = cv.bitwise_or(edge_blobs, sat_blobs)
     open_k  = cv.getStructuringElement(cv.MORPH_RECT, (MORPH_OPEN_KERNEL,  MORPH_OPEN_KERNEL))
