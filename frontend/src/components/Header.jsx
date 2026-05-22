@@ -1,3 +1,7 @@
+/**
+ * Header — top navigation bar showing the game title, current turn number,
+ * tiles placed vs total ratio, a live CV indicator dot, and a mute toggle.
+ */
 export default function Header({ currentTurn, boardTiles, remaining, isMuted, toggleMute }) {
   return <header className="header">
     <div>

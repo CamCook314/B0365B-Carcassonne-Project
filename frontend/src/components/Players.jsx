@@ -1,3 +1,8 @@
+/**
+ * Players — roster card showing each player's colour avatar, meeple icons,
+ * and live score. Highlights the active player's row and includes an End Game
+ * button that prompts for confirmation via SweetAlert2 before calling endGame().
+ */
 import { useState } from 'react';
 import Swal from 'sweetalert2';
 import { PLAYER_COLOUR_MAP } from "../constants/config";

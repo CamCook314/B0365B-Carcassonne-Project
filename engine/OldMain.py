@@ -1,3 +1,4 @@
+"""Original CLI game loop and board initialisation utilities, superseded by the Flask API."""
 #import ....
 import sys
 import os

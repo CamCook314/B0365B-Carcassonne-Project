@@ -1,3 +1,8 @@
+/**
+ * EndScreen — full-screen end-of-game results view. Ranks players by score,
+ * declares the winner (or tie), shows a scoreboard table, and provides a
+ * Play Again button that resets the game and returns to the entry screen.
+ */
 import { resetGame } from "../api/api";
 
 // Map server-side colour names to the readable hex from PLAYER_COLOURS in

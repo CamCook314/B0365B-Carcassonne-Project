@@ -1,3 +1,4 @@
+"""Complete catalogue of every Carcassonne tile variant and its edge attributes."""
 from tile import tile
 
 # Dict of all tiles and their attributes

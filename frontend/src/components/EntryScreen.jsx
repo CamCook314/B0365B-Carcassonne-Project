@@ -1,3 +1,8 @@
+/**
+ * EntryScreen — fallback screen shown when no game is running and the
+ * LandingPage is not in use. Offers 2–5 player start buttons and surfaces
+ * any API connection errors.
+ */
 export default function EntryScreen({ error, handleStart }) {
   return <div className="app">
     <header className="header">

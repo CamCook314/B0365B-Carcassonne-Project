@@ -1,3 +1,4 @@
+"""Manages the draw pile of remaining tiles and tracks how many of each tile have been placed."""
 import tile_set
 import data
 from collections import defaultdict

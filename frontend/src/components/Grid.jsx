@@ -1,3 +1,9 @@
+/**
+ * Grid — three-column layout for the in-game view.
+ * Left: Players, MeeplePlacer, ActivityLog.
+ * Centre: GameBoard and tile/turn metrics.
+ * Right: DetectedTile, Game Stats, ActiveEvents.
+ */
 import GameBoard from "./Gameboard";
 import Players from "./Players";
 import DetectedTile from "./DetectedTile";
