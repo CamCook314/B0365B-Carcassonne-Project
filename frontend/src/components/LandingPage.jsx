@@ -16,11 +16,12 @@ const FIELD_IDS     = [22, 30, 40, 50];
 const MOSAIC_IDS    = [0,1,4,8,12,17,22,30,40,52,60,72,80,90,100,110,120,130];
 
 const PILLS = [
-  { id: "about",    label: "About the Project" },
-  { id: "rules",    label: "How to Play" },
-  { id: "terrain",  label: "Terrain Types" },
-  { id: "scoring",  label: "Scoring" },
-  { id: "events",   label: "Special Events" },
+  { id: "about",      label: "About the Project" },
+  { id: "rules",      label: "How to Play" },
+  { id: "terrain",    label: "Terrain Types" },
+  { id: "scoring",    label: "Scoring" },
+  { id: "characters", label: "Characters" },
+  { id: "events",     label: "Special Events" },
 ];
 
 function TileImg({ id, className = "rule-tile" }) {
@@ -260,46 +261,107 @@ function ScoringPanel() {
   );
 }
 
+function CharactersPanel() {
+  const CHARACTERS = [
+    {
+      name: "Lord",
+      colour: "#BF616A",
+      label: "Red",
+      ability: "When scoring a completed city, steals 1 point from whichever player currently has the highest score.",
+    },
+    {
+      name: "Knight",
+      colour: "#81A1C1",
+      label: "Blue",
+      ability: "Earns a bonus +2 points every time a city they have a meeple in is completed.",
+    },
+    {
+      name: "Merchant",
+      colour: "#A3BE8C",
+      label: "Green",
+      ability: "Starts the game with 3 points already on the scoreboard.",
+    },
+    {
+      name: "Farmer",
+      colour: "#EBCB8B",
+      label: "Yellow",
+      ability: "Earns a bonus +1 point every time a road they have a meeple on is completed.",
+    },
+    {
+      name: "Necrobinder",
+      colour: "#4C566A",
+      label: "Black",
+      ability: "Immune to bad tile effects — whenever they score a structure, any cursed tiles inside it are cleansed and score normally.",
+    },
+  ];
+
+  return (
+    <div className="panel">
+      <p className="panel-intro">
+        Each player takes on a unique character class with a passive ability that activates when
+        scoring structures. Characters are assigned by player slot (colour), so choose your seat wisely.
+      </p>
+      <div className="events-explainer">
+        {CHARACTERS.map(c => (
+          <div key={c.name} className="event-explain-card">
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 14, height: 14, borderRadius: "50%", background: c.colour, flexShrink: 0, border: "1px solid rgba(255,255,255,0.15)" }} />
+              <h3 style={{ margin: 0 }}>{c.name}</h3>
+              <span style={{ marginLeft: "auto", fontSize: 11, color: c.colour, fontFamily: "monospace", fontWeight: 700 }}>{c.label}</span>
+            </div>
+            <p>{c.ability}</p>
+          </div>
+        ))}
+      </div>
+      <div className="score-note" style={{ marginTop: 20 }}>
+        <strong>Tile luck:</strong> for the first 3 turns after any tile is placed, it has a small
+        chance each turn to become a <strong style={{ color: "var(--green)" }}>good tile</strong> (scores 2×) or a{" "}
+        <strong style={{ color: "var(--red)" }}>bad tile</strong> (scores 0.5×). The Necrobinder's
+        ability blocks the bad tile penalty.
+      </div>
+    </div>
+  );
+}
+
 function EventsPanel() {
   return (
     <div className="panel">
       <p className="panel-intro">
-        This version of Carcassonne includes a custom events system. Events are locked until
-        all 12 river tiles have been placed. Once unlocked, events trigger randomly during the
-        game and can swing scores dramatically.
+        Once all 12 river tiles have been placed, 4 event markers are hidden at random positions
+        on the board. When a player places a tile on an event marker, it triggers immediately.
+        There are 3 possible events drawn at random.
       </p>
       <div className="events-explainer">
 
         <div className="event-explain-card">
+          <div className="event-explain-icon">🎴</div>
           <h3>Extra Turn</h3>
-          <p>A player gets to place a second tile this turn. Draw and place an additional tile
-             immediately before passing control to the next player.</p>
+          <p>The current player immediately gets a second turn — they place another tile before
+             control passes to the next player. The extra turn cannot chain (one bonus turn only).</p>
         </div>
 
         <div className="event-explain-card">
+          <div className="event-explain-icon">🌋</div>
           <h3>Volcano</h3>
-          <p>A random placed tile is removed from the board. Any meeple on that tile is returned
-             to its owner without scoring. Features touching the gap become incomplete.</p>
+          <p>A volcano erupts at the triggered position. Players have <strong>10 turns</strong> to
+             fully surround it with tiles on all 8 neighbouring spaces. If they fail, every meeple
+             on the board is wiped — all structure players cleared and meeple counts reset to 7.</p>
         </div>
 
         <div className="event-explain-card">
+          <div className="event-explain-icon">⚔️</div>
           <h3>Unrest</h3>
-          <p>A meeple belonging to the targeted player is forcibly removed from the board without
-             scoring, disrupting their control of a feature.</p>
-        </div>
-
-        <div className="event-explain-card">
-          <h3>Plague</h3>
-          <p>The targeted player loses a set number of points from their current score, simulating
-             a catastrophe hitting their civilization.</p>
+          <p>Civil unrest breaks out for <strong>4 turns</strong>. During this period completed
+             cities score reduced points — the normal pennant bonus is halved until the unrest
+             timer expires.</p>
         </div>
 
       </div>
 
-      <div className="score-note" style={{ marginTop: 28 }}>
+      <div className="score-note" style={{ marginTop: 20 }}>
         <strong>River phase:</strong> the game always begins with the 12 river tiles, which must
-        all be placed before normal tiles (and events) begin. The river tiles form a winding
-        starting layout that shapes early strategy.
+        all be placed before normal tiles (and events) begin. Event markers are only placed once
+        the river is complete.
       </div>
     </div>
   );
@@ -308,11 +370,12 @@ function EventsPanel() {
 /* ── Main component ─────────────────────────────────────────────── */
 
 const PANEL_MAP = {
-  about:   <AboutPanel />,
-  rules:   <RulesPanel />,
-  terrain: <TerrainPanel />,
-  scoring: <ScoringPanel />,
-  events:  <EventsPanel />,
+  about:      <AboutPanel />,
+  rules:      <RulesPanel />,
+  terrain:    <TerrainPanel />,
+  scoring:    <ScoringPanel />,
+  characters: <CharactersPanel />,
+  events:     <EventsPanel />,
 };
 
 export default function LandingPage({ error, handleStart }) {
@@ -382,7 +445,7 @@ export default function LandingPage({ error, handleStart }) {
 
       {/* Footer */}
       <footer className="landing-footer">
-        Carcassonne AR University Year 4 Project &nbsp;|&nbsp; B0365B
+        Carcassonne AR University Project &nbsp;|&nbsp; B0365B
       </footer>
 
     </div>
