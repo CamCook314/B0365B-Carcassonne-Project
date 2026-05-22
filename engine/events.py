@@ -27,6 +27,7 @@ class Event:
         return random.choice(["extra turn", "volcano", "unrest"]) #random event pool
 
     def play(self, game):
+        projector.set_event()
         if self.name == "extra turn":
             self.extra_turn_event(game)
         elif self.name == "volcano":

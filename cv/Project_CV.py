@@ -47,6 +47,7 @@ valid_placements       = None    # Bridge sets from /pending response: set of (g
 tile_blob_area         = None    # Area of the origin tile blob in proc pixels; used as dynamic area filter reference
 proj_clear_requested   = False   # CV sets when a tile is confirmed; bridge clears projection and resets this
 placement_override     = None    # Set by /force_place API: (gx, gy) to use as confirmed slot on next growth event
+invalid_slot_detected  = False   # CV sets when a confident placement lands on a non-valid slot; bridge drives projector
 calib_dots_found       = False   # True once 4 green calibration dots are stably detected
 calib_cam_points       = None    # List of 4 (x, y) camera proc-frame centroids (unordered)
 calib_complete         = False   # Set True by bridge once H is computed/loaded; gates tile detection
@@ -389,7 +390,7 @@ def cv_main_loop():
     _calib_stable       = 0   # consecutive frames with 4 green dots found
     _calib_total_frames = 0   # total frames spent waiting for calibration
 
-    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, grid_c, grid_d, valid_meeple_sides, last_id_crop_path, last_placed_crop_path, valid_placements, tile_blob_area, proj_clear_requested, placement_override, calib_dots_found, calib_cam_points, calib_complete
+    global tile_checked, tile_id, tile_candidates, tile_id_override, grid_checked, grid_coord, cv_to_engine, game_response, meeple_placed, meeple_colour, meeple_direction, meeple_skip, meeple_handled, expected_meeple_colour, remaining_families, grid_origin, grid_tile_size, grid_angle, grid_c, grid_d, valid_meeple_sides, last_id_crop_path, last_placed_crop_path, valid_placements, tile_blob_area, proj_clear_requested, placement_override, calib_dots_found, calib_cam_points, calib_complete, invalid_slot_detected
 
     print("Place the first tile on the board — it will be detected automatically. Press 'b' to force-confirm.")
 
@@ -908,13 +909,25 @@ def cv_main_loop():
                                           f"({top_cov} {label}-px, {margin:.0%} margin)")
 
                             # Reject any slot not in the engine's valid positions.
-                            # Guards against stale placed_tiles / stable_board_mask causing
-                            # an already-occupied slot to score highest.
+                            # When the detection was confident (margin >= 0.2 passed above),
+                            # treat this as a definitive invalid placement rather than an
+                            # arm/hand transient — notify immediately via INVALID_DISPLAY.
+                            _confident_invalid = False
                             if best_slot is not None and valid_placements is not None \
                                     and len(valid_placements) > 0:
                                 if best_slot not in valid_placements:
-                                    print(f"  Grid: slot {best_slot} rejected — not in engine's "
-                                          f"{len(valid_placements)} valid positions.")
+                                    print(f"  Grid: slot {best_slot} detected confidently but "
+                                          f"is NOT a valid position — invalid placement.")
+                                    _confident_invalid     = True
+                                    invalid_slot_detected  = True
+                                    rollback_prev_board_area   = prev_board_area
+                                    rollback_prev_sat_area     = prev_sat_area
+                                    rollback_last_coord        = last_placed_coord
+                                    rollback_stable_board_mask = (
+                                        stable_board_mask.copy()
+                                        if stable_board_mask is not None else None)
+                                    phase               = INVALID_DISPLAY
+                                    removal_frame_count = 0
                                     best_slot = None
 
                             # Final fallback: manual placement override from frontend click.
@@ -1037,6 +1050,8 @@ def cv_main_loop():
                                 rotation_pending    = True
                                 print(f"Placement confirmed at {best_slot} — "
                                       f"rotation detection deferred to settle period.")
+                            elif _confident_invalid:
+                                pass  # Already entered INVALID_DISPLAY above.
                             else:
                                 # Could not map growth to a grid slot — arm or hand likely.
                                 # Do NOT update prev_board_area or stable_board_mask:
@@ -1254,10 +1269,11 @@ def cv_main_loop():
                         cv.putText(result, f"Removing... ({remaining})", (10, 95),
                                    cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 2)
                         if removal_frame_count >= REMOVAL_CONFIRM_FRAMES:
-                            prev_board_area     = current_board_area
-                            prev_sat_area       = cv.countNonZero(cv.bitwise_and(sat_blobs, board_mask))
-                            phase               = WAIT_PLACEMENT
-                            removal_frame_count = 0
+                            prev_board_area       = current_board_area
+                            prev_sat_area         = cv.countNonZero(cv.bitwise_and(sat_blobs, board_mask))
+                            phase                 = WAIT_PLACEMENT
+                            removal_frame_count   = 0
+                            invalid_slot_detected = False
                             print("Tile removed — waiting for valid re-placement.")
                     else:
                         removal_frame_count = max(0, removal_frame_count - 1)

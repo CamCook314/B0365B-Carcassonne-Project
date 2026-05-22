@@ -45,6 +45,7 @@ _last_proj_tile_size: float | None = None
 _last_proj_angle:     float | None = None
 _homography_done:     bool         = False   # True once H is set (loaded or computed)
 _last_rotation_seq:   int          = 0       # tracks engine_api.board_rotation_seq
+_cv_invalid_active:   bool         = False   # tracks whether we've set the invalid border for CV-detected bad placement
 
 _CFG_PATH = ROOT / "cv" / "config.json"
 
@@ -460,6 +461,7 @@ def main():
 
             tiles_left = len(engine_api.tile_bag_instance.tile_bag) // 4
             print(f"[bridge] {p.return_colour()}'s turn - {tiles_left} tiles left")
+            projector.clear_event()  # dismiss event border from previous turn if any
 
             Project_CV.expected_meeple_colour = p.return_colour().lower()
 
@@ -471,6 +473,15 @@ def main():
                     _maybe_calibrate_homography()
                     _sync_projector_calibration()
                     _refresh_valid_on_rotation()
+
+                    # Sync invalid border for CV-detected invalid placements.
+                    global _cv_invalid_active
+                    if Project_CV.invalid_slot_detected and not _cv_invalid_active:
+                        projector.set_invalid()
+                        _cv_invalid_active = True
+                    elif not Project_CV.invalid_slot_detected and _cv_invalid_active:
+                        projector.clear_invalid()
+                        _cv_invalid_active = False
 
                     if Project_CV.tile_checked:
                         _handle_tile_checked()
