@@ -238,8 +238,9 @@ class gameStateClass:
 		if tile.up == 3 or tile.down == 3 or tile.right == 3 or tile.left == 3:
 			self.river_struct.append((x,y))
 
-		if len(self.river_struct) == 12:
+		if len(self.river_struct) == 5:
 			self.event_init()
+			self.river_struct.pop(1)
 
 		tile.player_placed = self.current_player()
 		for event in self.event_pool:
